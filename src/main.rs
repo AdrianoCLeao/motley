@@ -1,5 +1,6 @@
 mod gui;
 mod renderer;
+mod utilities;
 
 use eframe::NativeOptions;
 use gui::MyApp;
