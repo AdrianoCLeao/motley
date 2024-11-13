@@ -1,4 +1,4 @@
-use eframe::egui::{ CentralPanel, Context, Visuals};
+use eframe::egui::{self, CentralPanel, Context, SidePanel, Visuals};
 use crate::renderer::ThreeDViewer;
 use pollster::block_on;
 
@@ -24,14 +24,37 @@ impl eframe::App for MyApp {
             ctx.set_visuals(Visuals::light());
         }
 
-        CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Visualizador 3D");
-            if self.viewer.is_none() {
-                self.viewer = Some(block_on(ThreeDViewer::new()));
+        SidePanel::left("side_panel").show(ctx, |ui| {
+            ui.heading("Controles");
+
+            if ui.button("Alternar Modo Claro/Escuro").clicked() {
+                self.dark_mode = !self.dark_mode;
             }
 
+            ui.separator();
+            ui.label("Configurações do Visualizador:");
+            if self.viewer.is_none() {
+                if ui.button("Inicializar Visualizador 3D").clicked() {
+                    self.viewer = Some(block_on(ThreeDViewer::new()));
+                }
+            } else {
+                ui.label("Visualizador 3D Iniciado");
+                if ui.button("Resetar Visualizador").clicked() {
+                    self.viewer = None;
+                }
+            }
+
+            ui.separator();
+            ui.label("Informações:");
+            ui.label(format!("Modo Escuro: {}", self.dark_mode));
+        });
+
+        CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Visualizador 3D");
             if let Some(viewer) = &mut self.viewer {
                 viewer.render(ui);
+            } else {
+                ui.label("O visualizador 3D não está inicializado.");
             }
         });
     }
