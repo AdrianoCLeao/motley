@@ -17,7 +17,7 @@ pub struct MyApp {
 impl Default for MyApp {
     fn default() -> Self {
         Self {
-            dark_mode: false,
+            dark_mode: true,
             viewer: None,
             a0: 0.0,
             b0: 0.0,
