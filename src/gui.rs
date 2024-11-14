@@ -2,6 +2,8 @@ use eframe::egui::{self, CentralPanel, Context, SidePanel, Visuals};
 use crate::renderer::ThreeDViewer;
 use crate::utilities::{modular_distance, positive_mod, erf_approximation, clamp};
 use pollster::block_on;
+use dark_light::Mode;
+
 
 pub struct MyApp {
     dark_mode: bool,
@@ -16,8 +18,14 @@ pub struct MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
+        let dark_mode = match dark_light::detect() {
+            Mode::Dark => true,
+            Mode::Light => false,
+            Mode::Default => false, 
+        };
+
         Self {
-            dark_mode: true,
+            dark_mode,
             viewer: None,
             a0: 0.0,
             b0: 0.0,
