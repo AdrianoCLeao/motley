@@ -1,5 +1,10 @@
 use glam::*;
 
+/*
+The `Vertex` struct represents a single vertex in a 3D mesh. It includes position and normal
+data, which are essential for rendering and lighting calculations. The `Default` trait provides
+a default vertex with zeroed position and normal.
+*/
 #[derive(Clone, Copy, Debug)]
 pub struct Vertex {
     pub position: Vec3,
@@ -15,6 +20,10 @@ impl Default for Vertex {
     }
 }
 
+/*
+The `Mesh` struct represents a collection of vertices and indices forming a 3D object. It
+also stores a reference to the material index used for rendering the mesh.
+*/
 #[derive(Clone, Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
@@ -22,6 +31,10 @@ pub struct Mesh {
     pub material_idx: usize
 }
 
+/*
+The `Material` struct defines the appearance of a mesh using a base color stored as a `Vec4`.
+The `Default` trait initializes it with a white color.
+*/
 #[derive(Clone, Copy, Debug)]
 pub struct Material {
     pub base_color: Vec4
@@ -35,12 +48,21 @@ impl Default for Material {
     }
 }
 
+/*
+The `Model` struct aggregates multiple meshes and their associated materials, representing
+a complete 3D object that can be rendered.
+*/
 #[derive(Clone, Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>
 }
 
+/*
+Processes a single GLTF node, extracting its meshes and associated materials. This function reads
+vertex positions, normals, and indices, and maps them to custom `Mesh` and `Vertex` structs.
+It also handles material assignment and updates the `materials` array accordingly.
+*/
 fn process_node(
     node: &gltf::Node,
     buffers: &[gltf::buffer::Data],
@@ -100,6 +122,10 @@ fn process_node(
     }
 }
 
+/*
+Loads a 3D model from a GLTF file. It parses the document, processes the nodes to extract
+meshes and materials, and assembles them into a `Model` struct for further use.
+*/
 pub fn load_model(file_path: &str) -> Model {
     let (document, buffers, _images) = gltf::import(file_path)
         .expect("Failed to load model.");

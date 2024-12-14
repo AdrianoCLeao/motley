@@ -7,15 +7,33 @@ use window::{Window, Framebuffer};
 mod model;
 use model::{Model, Vertex, load_model};
 
+/*
+This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
+to load and process 3D models, transform vertices, and render triangles onto a framebuffer. It
+utilizes depth buffering for proper triangle occlusion and calculates pixel-level normals for shading.
+*/
+
+/*
+Converts RGB color values from individual u8 components to a single 32-bit integer
+for framebuffer compatibility.
+*/
 fn from_u8_rgb(r: u8, g: u8, b: u8) -> u32 {
     let (r, g, b) = (r as u32, g as u32, b as u32);
     (r << 16) | (g << 8) | b
 }
 
+/*
+Calculates the edge function for a triangle, which is used to determine whether
+a point lies inside the triangle based on its barycentric coordinates.
+*/
 fn edge_function(a: &Vec2, c: &Vec2, b: &Vec2) -> f32 {
     (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x)
 }
 
+/*
+Renders a single triangle to the framebuffer. It performs perspective transformations, rasterization,
+depth testing, and normal correction to compute a color for each pixel in the triangle.
+*/
 fn draw_triangle(
     framebuffer: &mut Framebuffer,
     depth_buffer: &mut Framebuffer,
@@ -76,6 +94,10 @@ fn draw_triangle(
     }
 }
 
+/*
+Applies a perspective projection to a vertex position using the Model-View-Projection (MVP) matrix.
+Returns the projected position and its reciprocal for later depth correction.
+*/
 fn project(p: &Vec3, mvp: &Mat4) -> (Vec3, f32) {
     let proj_pos = *mvp * Vec4::from((*p, 1.0));
     let rec = 1.0 / proj_pos.w;
@@ -83,10 +105,17 @@ fn project(p: &Vec3, mvp: &Mat4) -> (Vec3, f32) {
     (Vec3::new(rec_pos.x, rec_pos.y, rec_pos.z), rec)
 }
 
+/*
+Converts a vertex position from clip space to screen space, scaling it to fit the framebuffer dimensions.
+*/
 fn clip_to_screen_space(clip_space: &Vec2, screen_size: &Vec2) -> Vec2 {
     (*clip_space * -0.5 + 0.5) * *screen_size
 }
 
+/*
+Renders all the meshes in a model by iterating through their indices. Each triangle is
+transformed and rasterized onto the framebuffer.
+*/
 fn draw_model(
     framebuffer: &mut Framebuffer,
     depth_buffer: &mut Framebuffer,
@@ -111,6 +140,10 @@ fn draw_model(
     }
 }
 
+/*
+Main function sets up the window, depth buffer, and the rendering pipeline. It loads a GLTF model
+and continuously renders it to the screen while applying transformations for rotation.
+*/
 fn main() {
     let mut window: Window = Window::new("Motley project", 512, 512);
     let mut depth_buffer = Framebuffer::new(window.framebuffer().width(), window.framebuffer().height());

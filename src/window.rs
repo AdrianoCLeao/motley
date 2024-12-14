@@ -1,15 +1,31 @@
+/*
+The `Window` struct encapsulates a graphical window and an associated framebuffer,
+providing functionality for rendering and managing window interactions.
+*/
 pub struct Window {
     window: minifb::Window,
     framebuffer: Framebuffer
 }
 
+/*
+The `Framebuffer` struct stores pixel data and dimensions, serving as an off-screen
+buffer for rendering graphics before displaying them in a window.
+*/
 pub struct Framebuffer {
     data: Vec<u32>,
     width: usize,
     height: usize
 }
 
+/*
+The `Window` implementation provides methods to create, render, and manage the
+window, including interaction with the framebuffer for graphical updates.
+*/
 impl Window {
+    /*
+    Creates a new `Window` with a specified title, width, and height. Initializes
+    the framebuffer with matching dimensions for rendering pixel data.
+    */
     pub fn new(name: &str, width: usize, height: usize) -> Self {
         let options = minifb::WindowOptions {
             resize: true,
@@ -35,6 +51,10 @@ impl Window {
         !self.window.is_open()
     }
 
+    /*
+    Renders the framebuffer content to the window and handles resizing by reinitializing
+    the framebuffer if the window dimensions have changed.
+    */
     pub fn display(&mut self) {
         self.window.update_with_buffer(
             &self.framebuffer.data,
@@ -53,7 +73,15 @@ impl Window {
     }
 }
 
+/*
+The `Framebuffer` implementation provides methods for managing pixel data, including
+initialization, pixel manipulation, and clearing the buffer.
+*/
 impl Framebuffer {
+    /*
+    Creates a new `Framebuffer` with specified dimensions and initializes all pixels
+    to zero, representing a blank buffer.
+    */
     pub fn new(width: usize, height: usize) -> Self {
         Framebuffer {
             data: vec![0; width * height],
@@ -70,6 +98,10 @@ impl Framebuffer {
         self.height
     }
 
+    /*
+    Sets the value of a specific pixel in the buffer, identified by its (x, y)
+    coordinates. This allows direct pixel-level updates.
+    */
     pub fn set_pixel(&mut self, x: usize, y: usize, value: u32) {
         self.data[x + y * self.width] = value;
     }
@@ -82,6 +114,10 @@ impl Framebuffer {
         self.data[y * self.width + x] as f32 / u32::MAX as f32
     }
 
+    /*
+    Clears the framebuffer by filling it with a single color value, effectively
+    resetting its content for new rendering operations.
+    */
     pub fn clear(&mut self, value: u32) {
         for i in 0..self.data.len() {
             self.data[i] = value;
