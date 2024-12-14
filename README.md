@@ -74,7 +74,7 @@ MOTLEY é um simulador de motores baseado em Rust que permite aos usuários carr
 ## 4. Planejamento e Cronograma
 
 ### Mês 1: Configuração Inicial (30/01/2024)
-- Estruturar repositório GitHub com documentação inicial.
+- Estruturar repositório GitHub com documentação inicial. ✅
 - Configurar ambiente de desenvolvimento.
 - Implementar um protótipo básico de renderização 3D usando `wgpu`.
 - Entregável: Protótipo de renderização de um modelo 3D simples.
