@@ -73,33 +73,33 @@ MOTLEY é um simulador de motores baseado em Rust que permite aos usuários carr
 
 ## 4. Planejamento e Cronograma
 
-### Mês 1: Configuração Inicial
+### Mês 1: Configuração Inicial (30/01/2024)
 - Estruturar repositório GitHub com documentação inicial.
 - Configurar ambiente de desenvolvimento.
 - Implementar um protótipo básico de renderização 3D usando `wgpu`.
 - Entregável: Protótipo de renderização de um modelo 3D simples.
 
-### Mês 2: Física Básica
+### Mês 2: Física Básica (30/02/2024)
 - Integrar a biblioteca `rapier` para simulação física.
 - Implementar cálculos básicos de torque e carga.
 - Entregável: Simulação física rudimentar com visualização gráfica.
 
-### Mês 3: Simulação de Som
+### Mês 3: Simulação de Som (30/03/2024)
 - Integrar a biblioteca `rodio` para geração de áudio.
 - Sincronizar sons com a dinâmica do motor.
 - Entregável: Protótipo de simulação sonora.
 
-### Mês 4: Interface Gráfica
+### Mês 4: Interface Gráfica (30/04/2024)
 - Implementar GUI usando `egui`.
 - Adicionar controles para carregar modelos e configurar simulações.
 - Entregável: Interface básica funcional.
 
-### Mês 5: Análise e Exportação de Dados
+### Mês 5: Análise e Exportação de Dados (30/05/2024)
 - Implementar geração de gráficos em tempo real (e.g., torque vs. tempo).
 - Adicionar suporte para exportação de dados.
 - Entregável: Gráficos e exportação de dados de simulação.
 
-### Mês 6: Estabilidade e Extensibilidade
+### Mês 6: Estabilidade e Extensibilidade (30/06/2024)
 - Melhorar performance e otimizar o código.
 - Documentar APIs para extensões/plugins.
 - Entregável: Lançamento de uma versão beta com documentação completa.
