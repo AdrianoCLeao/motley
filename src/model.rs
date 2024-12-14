@@ -27,6 +27,14 @@ pub struct Material {
     pub base_color: Vec4
 }
 
+impl Default for Material {
+    fn default() -> Self {
+        Material {
+            base_color: Vec4::ONE
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
@@ -89,5 +97,30 @@ fn process_node(
                 });
             }
         }
+    }
+}
+
+pub fn load_model(file_path: &str) -> Model {
+    let (document, buffers, _images) = gltf::import(file_path)
+        .expect("Failed to load model.");
+
+    let mut meshes = Vec::new();
+    let mut materials = vec![Material::default(); document.materials().len()];
+    if materials.is_empty() {
+        materials.push(Material::default());
+    }
+    
+    if document.nodes().len() > 0 {
+        process_node(
+            document.nodes().next().as_ref().unwrap(),
+            &buffers,
+            &mut meshes,
+            &mut materials
+        );
+    }
+
+    Model {
+        meshes,
+        materials
     }
 }
