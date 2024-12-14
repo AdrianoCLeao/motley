@@ -32,3 +32,62 @@ pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>
 }
+
+fn process_node(
+    node: &gltf::Node,
+    buffers: &[gltf::buffer::Data],
+    meshes: &mut Vec<Mesh>,
+    materials: &mut [Material]
+) {
+    if let Some(mesh) = node.mesh() {
+        for primitive in mesh.primitives() {
+            if primitive.mode() == gltf::mesh::Mode::Triangles {
+                let reader = primitive.reader(
+                    |buffer| Some(&buffers[buffer.index()])
+                );
+
+                let positions = {
+                    let iter = reader
+                        .read_positions()
+                        .expect("Failed to process mesh node. (Vertices must have positions)");
+
+                    iter.map(|arr| -> Vec3 { Vec3::from(arr) }).collect::<Vec<_>>()
+                };
+
+                let mut vertices: Vec<Vertex> = positions
+                    .into_iter()
+                    .map(|position| {
+                        Vertex {
+                             position,
+                             ..Default::default()
+                        }
+                }).collect();
+
+                if let Some(normals) = reader.read_normals() {
+                    for (i, normal) in normals.enumerate() {
+                        vertices[i].normal = Vec3::from(normal);
+                    }
+                }
+
+                let indices = reader
+                    .read_indices()
+                    .map(|read_indices| {
+                        read_indices.into_u32().collect::<Vec<_>>()
+                    }).expect("Failed to process mesh node. (Indices are required)");
+                
+                let prim_material = primitive.material();
+                let pbr = prim_material.pbr_metallic_roughness();
+                let material_idx = primitive.material().index().unwrap_or(0);
+
+                let material = &mut materials[material_idx];
+                material.base_color = Vec4::from(pbr.base_color_factor());
+
+                meshes.push(Mesh {
+                    vertices,
+                    indices,
+                    material_idx
+                });
+            }
+        }
+    }
+}
