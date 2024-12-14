@@ -74,4 +74,9 @@ impl Framebuffer {
         self.data[x + y * self.width] = value;
     }
 
+    pub fn clear(&mut self, value: u32) {
+        for i in 0..self.data.len() {
+            self.data[i] = value;
+        }
+    }
 }
