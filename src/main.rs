@@ -6,6 +6,8 @@ mod window;
 use window::{Window, Framebuffer};
 mod model;
 use model::{Model, Vertex, load_model};
+mod texture;
+use texture::{Texture, load_texture};
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
