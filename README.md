@@ -3,7 +3,62 @@
 ## 1. Visão Geral do Projeto
 MOTLEY é um simulador de motores baseado em Rust que permite aos usuários carregar modelos 3D de motores e explorar sua dinâmica. Ele oferece análises em tempo real de torque, resposta à carga e rendimento do motor, combinadas com simulações sonoras. O projeto será open-source, visando robustez, performance e extensibilidade.
 
----
+## Estrutura de pastas
+A estrutura de pastas esperada do projeto é esta
+
+motley/
+- `src/`: Contém o código-fonte principal do projeto em Rust.
+  - `src/main.rs`: Ponto de entrada da aplicação.
+  - `src/engine/`: Módulo central da engine.
+    - `src/engine/mod.rs`: Declaração do módulo.
+    - `src/engine/rendering.rs`: Lógica de renderização 3D.
+    - `src/engine/physics.rs`: Simulação de física (torque, carga).
+    - `src/engine/audio.rs`: Simulação de som.
+    - `src/engine/utils.rs`: Funções auxiliares.
+  - `src/gui/`: Interface gráfica do usuário.
+    - `src/gui/mod.rs`: Declaração do módulo.
+    - `src/gui/window.rs`: Janela principal da GUI.
+    - `src/gui/components.rs`: Componentes visuais.
+  - `src/models/`: Manipulação de modelos 3D.
+    - `src/models/mod.rs`: Declaração do módulo.
+    - `src/models/loader.rs`: Carregamento de modelos (OBJ, GLTF).
+    - `src/models/parser.rs`: Parsing e validação de modelos.
+    - `src/models/serializer.rs`: Exportação de resultados.
+  - `src/tests/`: Testes unitários e de integração.
+    - `src/tests/integration.rs`: Testes de integração.
+    - `src/tests/performance.rs`: Benchmarks de desempenho.
+    - `src/tests/unit/`: Testes unitários específicos.
+      - `src/tests/unit/physics.rs`: Testes para simulação física.
+      - `src/tests/unit/rendering.rs`: Testes para renderização.
+      - `src/tests/unit/audio.rs`: Testes para simulação de som.
+- `assets/`: Recursos do projeto.
+  - `assets/models/`: Modelos 3D de exemplo.
+  - `assets/textures/`: Texturas usadas nos modelos.
+  - `assets/audio/`: Sons de exemplo.
+  - `assets/shaders/`: Shaders usados na renderização.
+- `docs/`: Documentação do projeto.
+  - `docs/api/`: Documentação das APIs internas.
+  - `docs/user-guide.md`: Guia do usuário final.
+  - `docs/development.md`: Guia para desenvolvedores.
+- `examples/`: Exemplos de uso da engine.
+  - `examples/minimal.rs`: Exemplo básico.
+  - `examples/advanced.rs`: Exemplo avançado com física e som.
+  - `examples/custom_plugin.rs`: Exemplo de extensão com plugin.
+- `scripts/`: Scripts auxiliares.
+  - `scripts/build.sh`: Script de build.
+  - `scripts/run.sh`: Script para rodar o projeto.
+  - `scripts/test.sh`: Script para executar os testes.
+- `.github/`: Configurações para GitHub.
+  - `.github/workflows/`: Configurações do GitHub Actions.
+    - `.github/workflows/build.yml`: Pipeline de build.
+    - `.github/workflows/test.yml`: Pipeline de testes.
+  - `.github/ISSUE_TEMPLATE.md`: Modelo para issues.
+- `Cargo.toml`: Configuração do projeto e dependências.
+- `README.md`: Documentação inicial do projeto.
+- `LICENSE`: Licença do projeto.
+- `CONTRIBUTING.md`: Regras de contribuição para o projeto.
+- `.gitignore`: Arquivos a serem ignorados pelo Git.
+
 
 ## 2. Documento de Requisitos
 
