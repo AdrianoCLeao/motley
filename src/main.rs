@@ -230,7 +230,7 @@ fn main() {
         if let Some(mouse_pos) = mouse_pos {
             if mouse_left_down {
                 if let Some(last_pos) = last_mouse_pos {
-                    let delta = Vec2::new(mouse_pos.0 - last_pos.0, mouse_pos.1 - last_pos.1);
+                    let delta = Vec2::new(last_pos.0 - mouse_pos.0, mouse_pos.1 - last_pos.1);
                     rotation += Vec2::new(delta.x, delta.y) * 0.01;
                 }
                 last_mouse_pos = Some(mouse_pos);
