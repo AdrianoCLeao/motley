@@ -48,7 +48,15 @@ fn draw_triangle(
     inv_trans_model_matrix: &Mat4,
     material: &Material
 ) {
-    // Projeção dos vértices
+    // --- Back-face Culling ---
+    let normal = (v1.position - v0.position).cross(v2.position - v0.position).normalize();
+    let camera_dir = Vec3::new(0.0, 0.0, -1.0); 
+    let cos_angle = normal.dot(camera_dir);
+
+    if cos_angle < -0.5 { 
+        return; 
+    }
+
     let v0_clip_space = project(&v0.position, mvp);
     let v1_clip_space = project(&v1.position, mvp);
     let v2_clip_space = project(&v2.position, mvp);
@@ -61,7 +69,7 @@ fn draw_triangle(
     let area_rep = 1.0 / edge_function(&v0_screen, &v1_screen, &v2_screen);
 
     // --- Tile-based Rasterization ---
-    let tile_size = 16;
+    let tile_size = 8;
     let min = v0_screen.min(v1_screen.min(v2_screen)).max(Vec2::ZERO);
     let max = (v0_screen.max(v1_screen.max(v2_screen)) + 1.0).min(screen_size);
 
