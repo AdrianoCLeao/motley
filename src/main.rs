@@ -53,7 +53,7 @@ fn draw_triangle(
     let camera_dir = Vec3::new(0.0, 0.0, -1.0); 
     let cos_angle = normal.dot(camera_dir);
 
-    if cos_angle < -0.5 { 
+    if cos_angle < -0.9 { 
         return; 
     }
 
@@ -69,7 +69,7 @@ fn draw_triangle(
     let area_rep = 1.0 / edge_function(&v0_screen, &v1_screen, &v2_screen);
 
     // --- Tile-based Rasterization ---
-    let tile_size = 8;
+    let tile_size = 4;
     let min = v0_screen.min(v1_screen.min(v2_screen)).max(Vec2::ZERO);
     let max = (v0_screen.max(v1_screen.max(v2_screen)) + 1.0).min(screen_size);
 
@@ -217,9 +217,34 @@ fn main() {
 
     let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
-    let timer = SystemTime::now();
+    let mut last_mouse_pos: Option<(f32, f32)> = None;
+    let mut rotation = Vec2::ZERO;
+    let mut zoom: f32 = 2.5;
 
     while !window.should_close() {
+        // --- Mouse interactions ---
+        let mouse_pos = window.get_mouse_pos(); 
+        let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
+        let mouse_right_down = window.is_mouse_down(minifb::MouseButton::Right);
+
+        if let Some(mouse_pos) = mouse_pos {
+            if mouse_left_down {
+                if let Some(last_pos) = last_mouse_pos {
+                    let delta = Vec2::new(mouse_pos.0 - last_pos.0, mouse_pos.1 - last_pos.1);
+                    rotation += Vec2::new(delta.x, delta.y) * 0.01;
+                }
+                last_mouse_pos = Some(mouse_pos);
+            } else {
+                last_mouse_pos = None;
+            }
+
+            if mouse_right_down {
+                zoom -= 0.1;
+            }
+        }
+
+        zoom = zoom.clamp(1.0, 10.0);
+
         let framebuffer = window.framebuffer();
 
         if framebuffer.width() != depth_buffer.width() || framebuffer.height() != depth_buffer.height() {
@@ -230,8 +255,10 @@ fn main() {
         depth_buffer.clear(u32::MAX);
 
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
-        let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), timer.elapsed().unwrap().as_secs_f32()) * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), (90.0f32).to_radians());
-        let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -2.5));
+
+        let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
+                        * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
+        let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -zoom));
         let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
         let mvp_matrix = proj_matrix * view_matrix * model_matrix;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();

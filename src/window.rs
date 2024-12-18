@@ -71,6 +71,14 @@ impl Window {
     pub fn framebuffer(&mut self) -> &mut Framebuffer {
         &mut self.framebuffer
     }
+
+    pub fn get_mouse_pos(&self) -> Option<(f32, f32)> {
+        self.window.get_mouse_pos(minifb::MouseMode::Clamp)
+    }
+
+    pub fn is_mouse_down(&self, button: minifb::MouseButton) -> bool {
+        self.window.get_mouse_down(button)
+    }
 }
 
 /*
