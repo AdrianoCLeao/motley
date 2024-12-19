@@ -1,15 +1,13 @@
 use glam::*;
 use std::sync::{Arc, Mutex};
 
-mod gui;
+pub mod gui;
 use gui::{Framebuffer, Window};
 use gui::components::setup_menu;
 
-mod model;
+pub mod model;
 use model::{load_model, Material, Model, Vertex};
 
-mod texture;
-use texture::{load_texture, Texture};
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
 to load and process 3D models, transform vertices, and render triangles onto a framebuffer. It

@@ -1,5 +1,5 @@
 use glam::*;
-use crate::{Texture, load_texture};
+use crate::model::{Texture, load_texture};
 use std::path::Path;
 
 /*
