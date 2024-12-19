@@ -1,4 +1,5 @@
 use glam::*;
+use std::sync::{Arc, Mutex};
 
 mod gui;
 use gui::{Framebuffer, Window};
@@ -227,73 +228,88 @@ fn draw_model(
 Main function sets up the window, depth buffer, and the rendering pipeline. It loads a GLTF model
 and continuously renders it to the screen while applying transformations for rotation.
 */
+
 fn main() {
     let mut window: Window = Window::new("Motley project", 512, 512);
     let mut depth_buffer = Framebuffer::new(window.framebuffer().width(), window.framebuffer().height());
 
     let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
-    let mut last_mouse_pos: Option<(f32, f32)> = None;
-    let mut rotation = Vec2::ZERO;
-    let mut zoom: f32 = 2.5;
+    let last_mouse_pos: Arc<Mutex<Option<(f32, f32)>>> = Arc::new(Mutex::new(None));
+    let rotation = Arc::new(Mutex::new(Vec2::ZERO));
+    let zoom = Arc::new(Mutex::new(2.5));
+    
+    {
+        let rotation = Arc::clone(&rotation);
+        let zoom = Arc::clone(&zoom);
+        window.add_menu_item("Reset View", 10, 10, 100, 30, move || {
+            *rotation.lock().unwrap() = Vec2::ZERO;
+            *zoom.lock().unwrap() = 2.5;
+        });
+    }
 
-    window.add_menu_item("Reset View", 10, 10, 100, 30, || {
-        println!("Reset View clicked!");
-    });
+    {
+        let zoom = Arc::clone(&zoom);
+        window.add_menu_item("Zoom In", 120, 10, 100, 30, move || {
+            let mut zoom_guard = zoom.lock().unwrap();
+            *zoom_guard = *zoom_guard - 0.5;
+        });
+    }
 
-    window.add_menu_item("Zoom In", 120, 10, 100, 30, || {
-        println!("Zoom In clicked!");
-    });
-
-    window.add_menu_item("Zoom Out", 230, 10, 100, 30, || {
-        println!("Zoom Out clicked!");
-    });
+    {
+        let zoom = Arc::clone(&zoom);
+        window.add_menu_item("Zoom Out", 230, 10, 100, 30, move || {
+            let mut zoom_guard = zoom.lock().unwrap();
+            *zoom_guard = *zoom_guard + 0.5;
+        });
+    }
 
     while !window.should_close() {
         // --- Mouse interactions ---
-        let mouse_pos = window.get_mouse_pos(); 
+        let mouse_pos = window.get_mouse_pos();
         let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
         let mouse_right_down = window.is_mouse_down(minifb::MouseButton::Right);
-
+    
         if let Some(mouse_pos) = mouse_pos {
             if mouse_left_down {
-                if let Some(last_pos) = last_mouse_pos {
+                let mut last_mouse_pos = last_mouse_pos.lock().unwrap();
+                if let Some(last_pos) = *last_mouse_pos {
                     let delta = Vec2::new(last_pos.0 - mouse_pos.0, mouse_pos.1 - last_pos.1);
-                    rotation += Vec2::new(delta.x, delta.y) * 0.01;
+                    *rotation.lock().unwrap() += Vec2::new(delta.x, delta.y) * 0.01;
                 }
-                last_mouse_pos = Some(mouse_pos);
-
-                // Processar cliques no menu usando o método público do Window
+                *last_mouse_pos = Some(mouse_pos);
+    
                 window.process_menu_click(mouse_pos.0, mouse_pos.1);
             } else {
-                last_mouse_pos = None;
+                *last_mouse_pos.lock().unwrap() = None;
             }
-
+    
             if mouse_right_down {
-                zoom -= 0.1;
+                let mut zoom_guard = zoom.lock().unwrap();
+                *zoom_guard -= 0.1;
             }
         }
-
-        zoom = zoom.clamp(1.0, 10.0);
-
+    
         let framebuffer = window.framebuffer();
-
+    
         if framebuffer.width() != depth_buffer.width() || framebuffer.height() != depth_buffer.height() {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
-
+    
         framebuffer.clear(from_u8_rgb(20, 20, 20));
         depth_buffer.clear(u32::MAX);
-
+    
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
-
+    
+        let rotation = rotation.lock().unwrap();
+        let zoom = zoom.lock().unwrap();
         let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
                         * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
-        let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -zoom));
+        let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -(*zoom)));
         let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
         let mvp_matrix = proj_matrix * view_matrix * model_matrix;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
-
+    
         draw_model(
             framebuffer,
             &mut depth_buffer,
@@ -301,11 +317,9 @@ fn main() {
             &mvp_matrix,
             &inv_trans_model_matrix
         );
-
-        // Renderizar o menu usando método público do Window
+    
         window.render_menu();
-
+    
         window.display();
     }
 }
-
