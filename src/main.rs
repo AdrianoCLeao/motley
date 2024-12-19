@@ -6,7 +6,7 @@ use gui::{Framebuffer, Window};
 use gui::components::setup_menu;
 
 pub mod model;
-use model::{load_model, Material, Model, Vertex, load_texture, Texture};
+use model::{load_model, Material, Model, Vertex};
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
