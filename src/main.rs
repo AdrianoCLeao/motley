@@ -3,11 +3,11 @@ use std::time::SystemTime;
 use glam::*;
 
 mod window;
-use window::{Window, Framebuffer};
+use window::{Framebuffer, Window};
 mod model;
-use model::{Model, Vertex, Material, load_model};
+use model::{load_model, Material, Model, Vertex};
 mod texture;
-use texture::{Texture, load_texture};
+use texture::{load_texture, Texture};
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
@@ -25,7 +25,11 @@ fn from_u8_rgb(r: u8, g: u8, b: u8) -> u32 {
 }
 
 fn from_vec3_rgb(rgb: &Vec3) -> u32 {
-    from_u8_rgb((rgb.x * 255.99) as u8, (rgb.y * 255.99) as u8, (rgb.z * 255.99) as u8)
+    from_u8_rgb(
+        (rgb.x * 255.99) as u8,
+        (rgb.y * 255.99) as u8,
+        (rgb.z * 255.99) as u8,
+    )
 }
 
 /*
@@ -43,18 +47,22 @@ depth testing, and normal correction to compute a color for each pixel in the tr
 fn draw_triangle(
     framebuffer: &mut Framebuffer,
     depth_buffer: &mut Framebuffer,
-    v0: &Vertex, v1: &Vertex, v2: &Vertex,
+    v0: &Vertex,
+    v1: &Vertex,
+    v2: &Vertex,
     mvp: &Mat4,
     inv_trans_model_matrix: &Mat4,
-    material: &Material
+    material: &Material,
 ) {
     // --- Back-face Culling ---
-    let normal = (v1.position - v0.position).cross(v2.position - v0.position).normalize();
-    let camera_dir = Vec3::new(0.0, 0.0, -1.0); 
+    let normal = (v1.position - v0.position)
+        .cross(v2.position - v0.position)
+        .normalize();
+    let camera_dir = Vec3::new(0.0, 0.0, -1.0);
     let cos_angle = normal.dot(camera_dir);
 
-    if cos_angle < -0.9 { 
-        return; 
+    if cos_angle < -0.9 {
+        return;
     }
 
     let v0_clip_space = project(&v0.position, mvp);
@@ -78,23 +86,26 @@ fn draw_triangle(
             let tile_min = Vec2::new(tile_x as f32, tile_y as f32);
             let tile_max = (tile_min + tile_size as f32).min(screen_size);
 
-            
             let w0 = edge_function(&v1_screen, &v2_screen, &tile_min);
             let w1 = edge_function(&v2_screen, &v0_screen, &tile_min);
             let w2 = edge_function(&v0_screen, &v1_screen, &tile_min);
 
             if w0 < 0.0 && w1 < 0.0 && w2 < 0.0 {
-                continue; 
+                continue;
             }
 
             // --- Edge Function Incremental ---
-            let step_x = Vec3::new(v1_screen.y - v2_screen.y, 
-                                   v2_screen.y - v0_screen.y, 
-                                   v0_screen.y - v1_screen.y);
+            let step_x = Vec3::new(
+                v1_screen.y - v2_screen.y,
+                v2_screen.y - v0_screen.y,
+                v0_screen.y - v1_screen.y,
+            );
 
-            let step_y = Vec3::new(v2_screen.x - v1_screen.x, 
-                                   v0_screen.x - v2_screen.x, 
-                                   v1_screen.x - v0_screen.x);
+            let step_y = Vec3::new(
+                v2_screen.x - v1_screen.x,
+                v0_screen.x - v2_screen.x,
+                v1_screen.x - v0_screen.x,
+            );
 
             let mut w0_row = w0;
             let mut w1_row = w1;
@@ -108,13 +119,14 @@ fn draw_triangle(
                 for x in (tile_min.x as usize)..(tile_max.x as usize) {
                     if w0 > 0.0 && w1 > 0.0 && w2 > 0.0 {
                         let bary_coords = Vec3::new(w0, w1, w2) * area_rep;
-                        let correction = 1.0 / (bary_coords.x * v0_clip_space.1
-                                             + bary_coords.y * v1_clip_space.1
-                                             + bary_coords.z * v2_clip_space.1);
+                        let correction = 1.0
+                            / (bary_coords.x * v0_clip_space.1
+                                + bary_coords.y * v1_clip_space.1
+                                + bary_coords.z * v2_clip_space.1);
 
                         let z = v0_clip_space.0.z * bary_coords.x
-                              + v1_clip_space.0.z * bary_coords.y
-                              + v2_clip_space.0.z * bary_coords.z;
+                            + v1_clip_space.0.z * bary_coords.y
+                            + v2_clip_space.0.z * bary_coords.z;
 
                         let depth = depth_buffer.get_pixel_f32(x, y);
                         if z < depth {
@@ -124,17 +136,21 @@ fn draw_triangle(
                             let n1 = *inv_trans_model_matrix * Vec4::from((v1.normal, 1.0));
                             let n2 = *inv_trans_model_matrix * Vec4::from((v2.normal, 1.0));
                             let normal = ((n0 * v0_clip_space.1 * bary_coords.x
-                                        + n1 * v1_clip_space.1 * bary_coords.y
-                                        + n2 * v2_clip_space.1 * bary_coords.z).xyz()
-                                        * correction).normalize();
+                                + n1 * v1_clip_space.1 * bary_coords.y
+                                + n2 * v2_clip_space.1 * bary_coords.z)
+                                .xyz()
+                                * correction)
+                                .normalize();
 
                             let tex_coord = (v0.tex_coord * v0_clip_space.1 * bary_coords.x
-                                           + v1.tex_coord * v1_clip_space.1 * bary_coords.y
-                                           + v2.tex_coord * v2_clip_space.1 * bary_coords.z) * correction;
+                                + v1.tex_coord * v1_clip_space.1 * bary_coords.y
+                                + v2.tex_coord * v2_clip_space.1 * bary_coords.z)
+                                * correction;
 
                             let mut base_color = material.base_color;
                             if let Some(base_color_texture) = &material.base_color_texture {
-                                base_color *= base_color_texture.sample_pixel(tex_coord.x, tex_coord.y);
+                                base_color *=
+                                    base_color_texture.sample_pixel(tex_coord.x, tex_coord.y);
                             }
 
                             let light_dir = Vec3::new(0.3, -0.8, -0.4).normalize();
@@ -156,7 +172,6 @@ fn draw_triangle(
         }
     }
 }
-
 
 /*
 Applies a perspective projection to a vertex position using the Model-View-Projection (MVP) matrix.
@@ -185,7 +200,7 @@ fn draw_model(
     depth_buffer: &mut Framebuffer,
     model: &Model,
     mvp: &Mat4,
-    inv_trans_model_matrix: &Mat4
+    inv_trans_model_matrix: &Mat4,
 ) {
     for mesh in &model.meshes {
         for i in 0..(mesh.indices.len() / 3) {
@@ -198,10 +213,12 @@ fn draw_model(
             draw_triangle(
                 framebuffer,
                 depth_buffer,
-                &v0, &v1, &v2,
+                &v0,
+                &v1,
+                &v2,
                 mvp,
                 inv_trans_model_matrix,
-                material
+                material,
             );
         }
     }
@@ -221,6 +238,18 @@ fn main() {
     let mut rotation = Vec2::ZERO;
     let mut zoom: f32 = 2.5;
 
+    window.add_menu_item("Reset View", 10, 10, 100, 30, || {
+        println!("Reset View clicked!");
+    });
+
+    window.add_menu_item("Zoom In", 120, 10, 100, 30, || {
+        println!("Zoom In clicked!");
+    });
+
+    window.add_menu_item("Zoom Out", 230, 10, 100, 30, || {
+        println!("Zoom Out clicked!");
+    });
+
     while !window.should_close() {
         // --- Mouse interactions ---
         let mouse_pos = window.get_mouse_pos(); 
@@ -234,6 +263,9 @@ fn main() {
                     rotation += Vec2::new(delta.x, delta.y) * 0.01;
                 }
                 last_mouse_pos = Some(mouse_pos);
+
+                // Processar cliques no menu usando o método público do Window
+                window.process_menu_click(mouse_pos.0, mouse_pos.1);
             } else {
                 last_mouse_pos = None;
             }
@@ -271,6 +303,10 @@ fn main() {
             &inv_trans_model_matrix
         );
 
+        // Renderizar o menu usando método público do Window
+        window.render_menu();
+
         window.display();
     }
 }
+
