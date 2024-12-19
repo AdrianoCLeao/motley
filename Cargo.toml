@@ -13,3 +13,7 @@ criterion = "0.5.1"
 [[bench]]
 name = "performance"
 harness = false
+
+[[bin]]
+name = "validate_benchmarks"
+path = "scripts/validate_benchmarks.rs"
