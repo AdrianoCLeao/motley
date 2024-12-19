@@ -28,3 +28,10 @@ jobs:
     - name: Validate Benchmark Results
       run: |
         cargo run --release --bin validate_benchmarks
+        
+    - name: Save Benchmark Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: target/criterion
+
