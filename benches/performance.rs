@@ -19,12 +19,14 @@ fn benchmark_model_loading(c: &mut Criterion) {
     });
 }
 
-// Registra os benchmarks
-criterion_group!(
-    benches,
-    benchmark_window_creation,
-    benchmark_model_loading,
-);
+fn create_criterion() -> Criterion {
+    Criterion::default().configure_from_args()
+}
 
-// Define o ponto de entrada principal dos benchmarks
+criterion_group! {
+    name = benches;
+    config = create_criterion();
+    targets = benchmark_window_creation, benchmark_model_loading
+}
+
 criterion_main!(benches);
