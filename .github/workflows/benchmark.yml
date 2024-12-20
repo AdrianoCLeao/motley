@@ -1,0 +1,36 @@
+name: Run Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    
+    - name: Install Xvfb
+      run: sudo apt-get install xvfb
+
+    - name: Run and Validate Benchmarks
+      run: |
+        cargo test --benches
+
+    - name: Save Benchmark Results
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: target/criterion

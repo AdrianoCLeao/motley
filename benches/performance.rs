@@ -1,15 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use motley::{gui::Window, model::load_model};
 
-fn benchmark_window_creation(c: &mut Criterion) {
-    c.bench_function("Window creation", |b| {
-        b.iter(|| {
-            let mut window = Window::new("Benchmark Test", 512, 512);
-            window.display();
-        });
-    });
-}
-
 fn benchmark_model_loading(c: &mut Criterion) {
     c.bench_function("Model loading", |b| {
         b.iter(|| {
@@ -19,12 +10,14 @@ fn benchmark_model_loading(c: &mut Criterion) {
     });
 }
 
-// Registra os benchmarks
-criterion_group!(
-    benches,
-    benchmark_window_creation,
-    benchmark_model_loading,
-);
+fn create_criterion() -> Criterion {
+    Criterion::default().configure_from_args()
+}
 
-// Define o ponto de entrada principal dos benchmarks
+criterion_group! {
+    name = benches;
+    config = create_criterion();
+    targets = benchmark_model_loading
+}
+
 criterion_main!(benches);
