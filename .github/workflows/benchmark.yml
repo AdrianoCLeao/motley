@@ -20,6 +20,9 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
+    
+    - name: Install Xvfb
+      run: sudo apt-get install xvfb
 
     - name: Run and Validate Benchmarks
       run: |
