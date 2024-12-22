@@ -243,7 +243,6 @@ fn main() {
     let last_mouse_pos: Arc<Mutex<Option<(f32, f32)>>> = Arc::new(Mutex::new(None));
 
     while !window.should_close() {
-        // Handle mouse interactions
         let mouse_pos = window.get_mouse_pos();
         let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
 

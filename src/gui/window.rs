@@ -95,16 +95,22 @@ impl Window {
     
         for y in 0..self.framebuffer.height() {
             for x in 0..self.sidebar_width {
-                full_data[x + y * total_width] = 0x333333; 
+                full_data[x + y * total_width] = 0x222222; 
             }
         }
     
         for y in self.framebuffer.height()..total_height {
             for x in self.sidebar_width..total_width {
-                full_data[x + y * total_width] = 0x333333;
+                full_data[x + y * total_width] = 0x222222;
             }
         }
     
+        for y in self.framebuffer.height()..total_height {
+            for x in 0..self.sidebar_width {
+                full_data[x + y * total_width] = 0x222222;
+            }
+        }
+
         for y in 0..self.framebuffer.height() {
             for x in 0..self.framebuffer.width() {
                 let framebuffer_x = self.sidebar_width + x; 
@@ -113,7 +119,6 @@ impl Window {
             }
         }
     
-        // Atualizar janela com o buffer combinado
         self.window
             .update_with_buffer(&full_data, total_width, total_height)
             .expect("Failed to update window buffer.");
