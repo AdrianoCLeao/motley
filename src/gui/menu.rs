@@ -69,4 +69,45 @@ impl Menu {
             }
         }
     }
+
+    pub fn render_in_sidebar(&self, framebuffer: &mut crate::gui::framebuffer::Framebuffer, sidebar_width: usize) {
+        let button_height = 40;
+        let mut y_offset = 10;
+
+        for item in &self.items {
+            for y in y_offset..(y_offset + button_height) {
+                for x in 10..(sidebar_width - 10) {
+                    framebuffer.set_pixel(x, y, 0xAAAAAA);
+                }
+            }
+
+            let label_color = 0x000000;
+            let label_x = 15;
+            let label_y = y_offset + 25;
+
+            for (i, _) in item.label.chars().enumerate() {
+                let offset_x = label_x + i * 6;
+                framebuffer.set_pixel(offset_x, label_y, label_color);
+            }
+
+            y_offset += button_height + 10; 
+        }
+    }
+
+    pub fn handle_click_in_sidebar(&mut self, mouse_x: f32, mouse_y: f32, sidebar_width: usize) {
+        let button_height = 40;
+        let mut y_offset = 10;
+
+        if mouse_x < 10.0 || mouse_x > sidebar_width as f32 - 10.0 {
+            return;
+        }
+
+        for item in &mut self.items {
+            if mouse_y >= y_offset as f32 && mouse_y <= (y_offset + button_height) as f32 {
+                item.execute();
+                return;
+            }
+            y_offset += button_height + 10;
+        }
+    }
 }

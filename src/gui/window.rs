@@ -47,11 +47,14 @@ impl Window {
 
     pub fn render_sidebar(&mut self) {
         let sidebar_color = 0x222222;
+    
         for y in 0..self.framebuffer.height() {
-            for x in self.framebuffer.width()..(self.framebuffer.width() + self.sidebar_width) {
+            for x in 0..self.sidebar_width {
                 self.framebuffer.set_pixel(x, y, sidebar_color);
             }
         }
+
+        self.menu.render_in_sidebar(&mut self.framebuffer, self.sidebar_width);
     }
 
     pub fn render_bottom_bar(&mut self) {
@@ -76,9 +79,10 @@ impl Window {
     }
 
     pub fn process_menu_click(&mut self, mouse_x: f32, mouse_y: f32) {
-        self.menu.handle_click(mouse_x, mouse_y);
+        if mouse_x < self.sidebar_width as f32 {
+            self.menu.handle_click_in_sidebar(mouse_x, mouse_y, self.sidebar_width);
+        }
     }
-
     pub fn render_menu(&mut self) {
         self.menu.render(&mut self.framebuffer);
     }
