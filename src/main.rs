@@ -229,8 +229,9 @@ and continuously renders it to the screen while applying transformations for rot
 */
 
 fn main() {
-    let mut window: Window = Window::new("Motley Project", 512, 512);
-    let mut depth_buffer = Framebuffer::new(window.framebuffer().width(), window.framebuffer().height());
+    let mut window: Window = Window::new("Motley Project", 800, 600);
+    let (fb_width, fb_height) = window.framebuffer_area();
+    let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
     let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
@@ -255,7 +256,9 @@ fn main() {
                 }
                 *last_mouse_pos = Some(mouse_pos);
 
-                window.process_menu_click(mouse_pos.0, mouse_pos.1);
+                if mouse_pos.0 < fb_width as f32 && mouse_pos.1 < fb_height as f32 {
+                    window.process_menu_click(mouse_pos.0, mouse_pos.1);
+                }
             } else {
                 *last_mouse_pos.lock().unwrap() = None;
             }
@@ -290,6 +293,8 @@ fn main() {
         );
 
         window.render_menu();
+        window.render_sidebar();
+        window.render_bottom_bar();
         window.display();
     }
 }

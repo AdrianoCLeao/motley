@@ -4,6 +4,8 @@ pub struct Window {
     window: minifb::Window,
     framebuffer: Framebuffer,
     menu: Menu,
+    sidebar_width: usize,
+    bottom_bar_height: usize,
 }
 
 impl Window {
@@ -13,18 +15,63 @@ impl Window {
             ..Default::default()
         };
 
-        let window = minifb::Window::new(name, width, height, options).expect("Failed to create window.");
-        let framebuffer = Framebuffer::new(width, height);
+        let total_width = width;
+        let total_height = height;
+
+        let window = minifb::Window::new(name, total_width, total_height, options)
+            .expect("Failed to create window.");
+
+        let framebuffer = Framebuffer::new(width - 200, height - 50);
         let menu = Menu::new();
 
         Window {
             window,
             framebuffer,
             menu,
+            sidebar_width: 200,
+            bottom_bar_height: 50,
         }
     }
 
-    pub fn add_menu_item<F: 'static + FnMut()>(&mut self, label: &str, x: usize, y: usize, width: usize, height: usize, action: F) {
+    pub fn framebuffer_area(&self) -> (usize, usize) {
+        (self.framebuffer.width(), self.framebuffer.height())
+    }
+
+    pub fn sidebar_width(&self) -> usize {
+        self.sidebar_width
+    }
+
+    pub fn bottom_bar_height(&self) -> usize {
+        self.bottom_bar_height
+    }
+
+    pub fn render_sidebar(&mut self) {
+        let sidebar_color = 0x222222;
+        for y in 0..self.framebuffer.height() {
+            for x in self.framebuffer.width()..(self.framebuffer.width() + self.sidebar_width) {
+                self.framebuffer.set_pixel(x, y, sidebar_color);
+            }
+        }
+    }
+
+    pub fn render_bottom_bar(&mut self) {
+        let bottom_color = 0x333333;
+        for y in self.framebuffer.height()..(self.framebuffer.height() + self.bottom_bar_height) {
+            for x in 0..self.framebuffer.width() {
+                self.framebuffer.set_pixel(x, y, bottom_color);
+            }
+        }
+    }
+
+    pub fn add_menu_item<F: 'static + FnMut()>(
+        &mut self,
+        label: &str,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+        action: F,
+    ) {
         self.menu.add_item(label, x, y, width, height, action);
     }
 
@@ -41,14 +88,35 @@ impl Window {
     }
 
     pub fn display(&mut self) {
-        self.window
-            .update_with_buffer(&self.framebuffer.data, self.framebuffer.width(), self.framebuffer.height())
-            .expect("Failed to update window buffer.");
-
-        let (width, height) = self.window.get_size();
-        if width != self.framebuffer.width() || height != self.framebuffer.height() {
-            self.framebuffer = Framebuffer::new(width, height);
+        let total_width = self.framebuffer.width() + self.sidebar_width;
+        let total_height = self.framebuffer.height() + self.bottom_bar_height;
+    
+        let mut full_data = vec![0x000000; total_width * total_height];
+    
+        for y in 0..self.framebuffer.height() {
+            for x in 0..self.sidebar_width {
+                full_data[x + y * total_width] = 0x333333; 
+            }
         }
+    
+        for y in self.framebuffer.height()..total_height {
+            for x in self.sidebar_width..total_width {
+                full_data[x + y * total_width] = 0x333333;
+            }
+        }
+    
+        for y in 0..self.framebuffer.height() {
+            for x in 0..self.framebuffer.width() {
+                let framebuffer_x = self.sidebar_width + x; 
+                full_data[framebuffer_x + y * total_width] =
+                    self.framebuffer.data[x + y * self.framebuffer.width()];
+            }
+        }
+    
+        // Atualizar janela com o buffer combinado
+        self.window
+            .update_with_buffer(&full_data, total_width, total_height)
+            .expect("Failed to update window buffer.");
     }
 
     pub fn framebuffer(&mut self) -> &mut Framebuffer {
