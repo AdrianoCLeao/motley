@@ -9,7 +9,6 @@ pub mod model;
 use model::{load_model, Material, Model, Vertex};
 
 mod handlers;
-use handlers::keyboard_handler::KeyboardHandler;
 use handlers::mouse_handler::MouseHandler;
 
 /*
@@ -241,11 +240,11 @@ fn main() {
 
     let rotation = Arc::new(Mutex::new(Vec2::ZERO));
     let zoom = Arc::new(Mutex::new(2.5));
+    let pan_offset = Arc::new(Mutex::new(Vec2::ZERO));
 
     setup_menu(&mut window, Arc::clone(&rotation), Arc::clone(&zoom));
 
     let mouse_handler = MouseHandler::new();
-    let keyboard_handler = KeyboardHandler::new();
 
     while !window.should_close() {
         let sidebar_width = window.sidebar_width();
@@ -254,11 +253,13 @@ fn main() {
             &mut window,
             fb_width,
             fb_height,
-            sidebar_width, 
+            sidebar_width,
             Arc::clone(&rotation),
+            Arc::clone(&zoom),
+            Arc::clone(&pan_offset),
         );
 
-        keyboard_handler.handle(&mut window);
+        println!("Passou pelo handler");
 
         let framebuffer = window.framebuffer();
 
@@ -273,11 +274,21 @@ fn main() {
 
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
 
+        let pan = {
+            let pan_offset_guard = pan_offset.lock().unwrap();
+            (pan_offset_guard.x, pan_offset_guard.y)
+        };
+        
+        let zoom_value = {
+            let zoom_guard = zoom.lock().unwrap();
+            *zoom_guard
+        };
+
         let rotation = rotation.lock().unwrap();
-        let zoom = zoom.lock().unwrap();
         let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
             * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
-        let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -(*zoom)));
+        let view_matrix = Mat4::from_translation(Vec3::new(pan.0, pan.1, -zoom_value));
+
         let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
         let mvp_matrix = proj_matrix * view_matrix * model_matrix;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();

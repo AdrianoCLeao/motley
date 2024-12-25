@@ -6,6 +6,9 @@ pub struct Window {
     menu: Menu,
     sidebar_width: usize,
     bottom_bar_height: usize,
+    rotation: glam::Vec2,
+    pan_offset: glam::Vec2,
+    zoom: f32,
 }
 
 impl Window {
@@ -30,6 +33,9 @@ impl Window {
             menu,
             sidebar_width: 200,
             bottom_bar_height: 50,
+            rotation: glam::Vec2::ZERO,
+            pan_offset: glam::Vec2::ZERO,
+            zoom: 2.5,
         }
     }
 
@@ -43,6 +49,30 @@ impl Window {
 
     pub fn bottom_bar_height(&self) -> usize {
         self.bottom_bar_height
+    }
+
+    pub fn get_rotation(&self) -> glam::Vec2 {
+        self.rotation
+    }
+
+    pub fn get_pan_offset(&self) -> glam::Vec2 {
+        self.pan_offset
+    }
+
+    pub fn get_zoom(&self) -> f32 {
+        self.zoom
+    }
+
+    pub fn set_rotation(&mut self, delta: glam::Vec2) {
+        self.rotation += delta * 0.01; // Ajuste de sensibilidade
+    }
+
+    pub fn set_pan_offset(&mut self, delta: glam::Vec2) {
+        self.pan_offset += delta * 0.01; // Ajuste de sensibilidade
+    }
+
+    pub fn set_zoom(&mut self, delta: f32) {
+        self.zoom = (self.zoom - delta * 0.1).clamp(1.0, 10.0); // Limita o zoom entre 1.0 e 10.0
     }
 
     pub fn render_bottom_bar(&mut self) {
@@ -71,6 +101,7 @@ impl Window {
             self.menu.handle_click_in_sidebar(mouse_x, mouse_y, self.sidebar_width);
         }
     }
+
     pub fn render_menu(&mut self) {
         self.menu.render(&mut self.framebuffer);
     }
@@ -128,5 +159,17 @@ impl Window {
 
     pub fn is_mouse_down(&self, button: minifb::MouseButton) -> bool {
         self.window.get_mouse_down(button)
+    }
+
+    pub fn is_key_down(&self, key: minifb::Key) -> bool {
+        self.window.is_key_down(key)
+    }
+
+    pub fn get_scroll_wheel(&self) -> f32 {
+        if let Some((_x, y)) = self.window.get_scroll_wheel() {
+            y 
+        } else {
+            0.0
+        }
     }
 }
