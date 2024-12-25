@@ -2,8 +2,8 @@ use glam::*;
 use std::sync::{Arc, Mutex};
 
 pub mod gui;
-use gui::{Framebuffer, Window};
 use gui::components::setup_menu;
+use gui::{Framebuffer, Window};
 
 pub mod model;
 use model::{load_model, Material, Model, Vertex};
@@ -245,13 +245,13 @@ fn main() {
     while !window.should_close() {
         let mouse_pos = window.get_mouse_pos();
         let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
-    
+
         if let Some(mouse_pos) = mouse_pos {
             let within_framebuffer = mouse_pos.0 >= window.sidebar_width() as f32
                 && mouse_pos.0 < (window.sidebar_width() + fb_width) as f32
                 && mouse_pos.1 >= 0.0
                 && mouse_pos.1 < fb_height as f32;
-    
+
             if mouse_left_down {
                 if within_framebuffer {
                     let mut last_mouse_pos = last_mouse_pos.lock().unwrap();
@@ -269,18 +269,20 @@ fn main() {
                 *last_mouse_pos.lock().unwrap() = None;
             }
         }
-    
+
         let framebuffer = window.framebuffer();
-    
-        if framebuffer.width() != depth_buffer.width() || framebuffer.height() != depth_buffer.height() {
+
+        if framebuffer.width() != depth_buffer.width()
+            || framebuffer.height() != depth_buffer.height()
+        {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
-    
+
         framebuffer.clear(0x141414);
         depth_buffer.clear(u32::MAX);
-    
+
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
-    
+
         let rotation = rotation.lock().unwrap();
         let zoom = zoom.lock().unwrap();
         let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
@@ -289,7 +291,7 @@ fn main() {
         let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
         let mvp_matrix = proj_matrix * view_matrix * model_matrix;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
-    
+
         draw_model(
             framebuffer,
             &mut depth_buffer,
@@ -297,7 +299,8 @@ fn main() {
             &mvp_matrix,
             &inv_trans_model_matrix,
         );
-    
+
+        window.framebuffer().render_orientation_cube(50);
         window.render_bottom_bar();
         window.display();
     }
