@@ -260,15 +260,14 @@ fn main() {
         );
 
         let framebuffer = window.framebuffer();
-
-        if framebuffer.width() != depth_buffer.width()
-            || framebuffer.height() != depth_buffer.height()
-        {
+        if framebuffer.width() != depth_buffer.width() || framebuffer.height() != depth_buffer.height() {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
 
         framebuffer.clear(0x141414);
         depth_buffer.clear(u32::MAX);
+        framebuffer.render_grid();
+        framebuffer.render_orientation_cube(50);
 
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
 
