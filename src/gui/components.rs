@@ -11,7 +11,7 @@ pub fn setup_menu(window: &mut Window, rotation: Arc<Mutex<Vec2>>, zoom: Arc<Mut
     {
         let rotation = Arc::clone(&rotation);
         let zoom = Arc::clone(&zoom);
-        window.add_menu_item("Reset View", 10, 10, 100, 30, move || {
+        window.add_menu_item("Reset View", 10, 10, 180, 30, move || {
             *rotation.lock().unwrap() = Vec2::ZERO;
             *zoom.lock().unwrap() = 2.5;
         });
@@ -19,7 +19,7 @@ pub fn setup_menu(window: &mut Window, rotation: Arc<Mutex<Vec2>>, zoom: Arc<Mut
 
     {
         let zoom = Arc::clone(&zoom);
-        window.add_menu_item("Zoom In", 120, 10, 100, 30, move || {
+        window.add_menu_item("Zoom In", 10, 50, 180, 30, move || {
             let mut zoom_guard = zoom.lock().unwrap();
             *zoom_guard -= 0.5;
         });
@@ -27,7 +27,7 @@ pub fn setup_menu(window: &mut Window, rotation: Arc<Mutex<Vec2>>, zoom: Arc<Mut
 
     {
         let zoom = Arc::clone(&zoom);
-        window.add_menu_item("Zoom Out", 230, 10, 100, 30, move || {
+        window.add_menu_item("Zoom Out", 10, 90, 180, 30, move || {
             let mut zoom_guard = zoom.lock().unwrap();
             *zoom_guard += 0.5;
         });

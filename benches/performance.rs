@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use motley::{gui::Window, model::load_model};
+use motley::model::load_model;
 
 fn benchmark_model_loading(c: &mut Criterion) {
     c.bench_function("Model loading", |b| {

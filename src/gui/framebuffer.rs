@@ -22,11 +22,15 @@ impl Framebuffer {
     }
 
     pub fn set_pixel(&mut self, x: usize, y: usize, value: u32) {
-        self.data[x + y * self.width] = value;
+        if x < self.width && y < self.height {
+            self.data[x + y * self.width] = value;
+        }
     }
 
     pub fn set_pixel_f32(&mut self, x: usize, y: usize, value: f32) {
-        self.data[y * self.width + x] = (value * u32::MAX as f32) as u32;
+        if x < self.width && y < self.height {
+            self.data[x + y * self.width] = (value * u32::MAX as f32) as u32;
+        }
     }
 
     pub fn get_pixel_f32(&mut self, x: usize, y: usize) -> f32 {

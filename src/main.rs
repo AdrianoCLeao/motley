@@ -229,8 +229,9 @@ and continuously renders it to the screen while applying transformations for rot
 */
 
 fn main() {
-    let mut window: Window = Window::new("Motley Project", 512, 512);
-    let mut depth_buffer = Framebuffer::new(window.framebuffer().width(), window.framebuffer().height());
+    let mut window: Window = Window::new("Motley Project", 800, 600);
+    let (fb_width, fb_height) = window.framebuffer_area();
+    let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
     let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
@@ -242,54 +243,62 @@ fn main() {
     let last_mouse_pos: Arc<Mutex<Option<(f32, f32)>>> = Arc::new(Mutex::new(None));
 
     while !window.should_close() {
-        // Handle mouse interactions
         let mouse_pos = window.get_mouse_pos();
         let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
-
+    
         if let Some(mouse_pos) = mouse_pos {
+            let within_framebuffer = mouse_pos.0 >= window.sidebar_width() as f32
+                && mouse_pos.0 < (window.sidebar_width() + fb_width) as f32
+                && mouse_pos.1 >= 0.0
+                && mouse_pos.1 < fb_height as f32;
+    
             if mouse_left_down {
-                let mut last_mouse_pos = last_mouse_pos.lock().unwrap();
-                if let Some(last_pos) = *last_mouse_pos {
-                    let delta = Vec2::new(last_pos.0 - mouse_pos.0, mouse_pos.1 - last_pos.1);
-                    *rotation.lock().unwrap() += Vec2::new(delta.x, delta.y) * 0.01;
+                if within_framebuffer {
+                    let mut last_mouse_pos = last_mouse_pos.lock().unwrap();
+                    if let Some(last_pos) = *last_mouse_pos {
+                        let delta = Vec2::new(last_pos.0 - mouse_pos.0, mouse_pos.1 - last_pos.1);
+                        *rotation.lock().unwrap() += Vec2::new(delta.x, delta.y) * 0.01;
+                    }
+                    *last_mouse_pos = Some(mouse_pos);
+                } else {
+                    if mouse_pos.0 < window.sidebar_width() as f32 {
+                        window.process_menu_click(mouse_pos.0, mouse_pos.1);
+                    }
                 }
-                *last_mouse_pos = Some(mouse_pos);
-
-                window.process_menu_click(mouse_pos.0, mouse_pos.1);
             } else {
                 *last_mouse_pos.lock().unwrap() = None;
             }
         }
-
+    
         let framebuffer = window.framebuffer();
-
+    
         if framebuffer.width() != depth_buffer.width() || framebuffer.height() != depth_buffer.height() {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
-
+    
         framebuffer.clear(0x141414);
         depth_buffer.clear(u32::MAX);
-
+    
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
-
+    
         let rotation = rotation.lock().unwrap();
         let zoom = zoom.lock().unwrap();
         let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
-                        * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
+            * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
         let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -(*zoom)));
         let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
         let mvp_matrix = proj_matrix * view_matrix * model_matrix;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
-
+    
         draw_model(
             framebuffer,
             &mut depth_buffer,
             &model,
             &mvp_matrix,
-            &inv_trans_model_matrix
+            &inv_trans_model_matrix,
         );
-
-        window.render_menu();
+    
+        window.render_bottom_bar();
         window.display();
     }
 }
