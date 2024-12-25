@@ -9,8 +9,8 @@ pub mod model;
 use model::{load_model, Material, Model, Vertex};
 
 mod handlers;
-use handlers::mouse_handler::MouseHandler;
 use handlers::keyboard_handler::KeyboardHandler;
+use handlers::mouse_handler::MouseHandler;
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
@@ -244,35 +244,21 @@ fn main() {
 
     setup_menu(&mut window, Arc::clone(&rotation), Arc::clone(&zoom));
 
-    let last_mouse_pos: Arc<Mutex<Option<(f32, f32)>>> = Arc::new(Mutex::new(None));
+    let mouse_handler = MouseHandler::new();
+    let keyboard_handler = KeyboardHandler::new();
 
     while !window.should_close() {
-        let mouse_pos = window.get_mouse_pos();
-        let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
+        let sidebar_width = window.sidebar_width();
 
-        if let Some(mouse_pos) = mouse_pos {
-            let within_framebuffer = mouse_pos.0 >= window.sidebar_width() as f32
-                && mouse_pos.0 < (window.sidebar_width() + fb_width) as f32
-                && mouse_pos.1 >= 0.0
-                && mouse_pos.1 < fb_height as f32;
+        mouse_handler.handle(
+            &mut window,
+            fb_width,
+            fb_height,
+            sidebar_width, 
+            Arc::clone(&rotation),
+        );
 
-            if mouse_left_down {
-                if within_framebuffer {
-                    let mut last_mouse_pos = last_mouse_pos.lock().unwrap();
-                    if let Some(last_pos) = *last_mouse_pos {
-                        let delta = Vec2::new(last_pos.0 - mouse_pos.0, mouse_pos.1 - last_pos.1);
-                        *rotation.lock().unwrap() += Vec2::new(delta.x, delta.y) * 0.01;
-                    }
-                    *last_mouse_pos = Some(mouse_pos);
-                } else {
-                    if mouse_pos.0 < window.sidebar_width() as f32 {
-                        window.process_menu_click(mouse_pos.0, mouse_pos.1);
-                    }
-                }
-            } else {
-                *last_mouse_pos.lock().unwrap() = None;
-            }
-        }
+        keyboard_handler.handle(&mut window);
 
         let framebuffer = window.framebuffer();
 
@@ -304,7 +290,6 @@ fn main() {
             &inv_trans_model_matrix,
         );
 
-        window.framebuffer().render_orientation_cube(50);
         window.render_bottom_bar();
         window.display();
     }
