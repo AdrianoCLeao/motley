@@ -2,11 +2,14 @@ use glam::*;
 use std::sync::{Arc, Mutex};
 
 pub mod gui;
-use gui::{Framebuffer, Window};
 use gui::components::setup_menu;
+use gui::{Framebuffer, Window};
 
 pub mod model;
 use model::{load_model, Material, Model, Vertex};
+
+mod handlers;
+use handlers::mouse_handler::MouseHandler;
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
@@ -237,59 +240,56 @@ fn main() {
 
     let rotation = Arc::new(Mutex::new(Vec2::ZERO));
     let zoom = Arc::new(Mutex::new(2.5));
+    let pan_offset = Arc::new(Mutex::new(Vec2::ZERO));
 
     setup_menu(&mut window, Arc::clone(&rotation), Arc::clone(&zoom));
 
-    let last_mouse_pos: Arc<Mutex<Option<(f32, f32)>>> = Arc::new(Mutex::new(None));
+    let mouse_handler = MouseHandler::new();
 
     while !window.should_close() {
-        let mouse_pos = window.get_mouse_pos();
-        let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
-    
-        if let Some(mouse_pos) = mouse_pos {
-            let within_framebuffer = mouse_pos.0 >= window.sidebar_width() as f32
-                && mouse_pos.0 < (window.sidebar_width() + fb_width) as f32
-                && mouse_pos.1 >= 0.0
-                && mouse_pos.1 < fb_height as f32;
-    
-            if mouse_left_down {
-                if within_framebuffer {
-                    let mut last_mouse_pos = last_mouse_pos.lock().unwrap();
-                    if let Some(last_pos) = *last_mouse_pos {
-                        let delta = Vec2::new(last_pos.0 - mouse_pos.0, mouse_pos.1 - last_pos.1);
-                        *rotation.lock().unwrap() += Vec2::new(delta.x, delta.y) * 0.01;
-                    }
-                    *last_mouse_pos = Some(mouse_pos);
-                } else {
-                    if mouse_pos.0 < window.sidebar_width() as f32 {
-                        window.process_menu_click(mouse_pos.0, mouse_pos.1);
-                    }
-                }
-            } else {
-                *last_mouse_pos.lock().unwrap() = None;
-            }
-        }
-    
+        let sidebar_width = window.sidebar_width();
+
+        mouse_handler.handle(
+            &mut window,
+            fb_width,
+            fb_height,
+            sidebar_width,
+            Arc::clone(&rotation),
+            Arc::clone(&zoom),
+            Arc::clone(&pan_offset),
+        );
+
         let framebuffer = window.framebuffer();
-    
         if framebuffer.width() != depth_buffer.width() || framebuffer.height() != depth_buffer.height() {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
-    
+
         framebuffer.clear(0x141414);
         depth_buffer.clear(u32::MAX);
-    
+        framebuffer.render_grid();
+        framebuffer.render_orientation_cube(50);
+
         let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
-    
+
+        let pan = {
+            let pan_offset_guard = pan_offset.lock().unwrap();
+            (pan_offset_guard.x, pan_offset_guard.y)
+        };
+        
+        let zoom_value = {
+            let zoom_guard = zoom.lock().unwrap();
+            *zoom_guard
+        };
+
         let rotation = rotation.lock().unwrap();
-        let zoom = zoom.lock().unwrap();
         let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
             * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
-        let view_matrix = Mat4::from_translation(Vec3::new(0.0, 0.0, -(*zoom)));
+        let view_matrix = Mat4::from_translation(Vec3::new(pan.0, pan.1, -zoom_value));
+
         let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
         let mvp_matrix = proj_matrix * view_matrix * model_matrix;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
-    
+
         draw_model(
             framebuffer,
             &mut depth_buffer,
@@ -297,7 +297,7 @@ fn main() {
             &mvp_matrix,
             &inv_trans_model_matrix,
         );
-    
+
         window.render_bottom_bar();
         window.display();
     }
