@@ -259,8 +259,6 @@ fn main() {
             Arc::clone(&pan_offset),
         );
 
-        println!("Passou pelo handler");
-
         let framebuffer = window.framebuffer();
 
         if framebuffer.width() != depth_buffer.width()

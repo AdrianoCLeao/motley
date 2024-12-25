@@ -34,21 +34,22 @@ impl MouseHandler {
                 && mouse_pos.1 >= 0.0
                 && mouse_pos.1 < fb_height as f32;
 
-            if mouse_middle_down && within_framebuffer {
-                let mut last_mouse_pos = self.last_mouse_pos.lock().unwrap();
-                if let Some(last_pos) = *last_mouse_pos {
-                    let delta = Vec2::new(mouse_pos.0 - last_pos.0, last_pos.1 - mouse_pos.1);
-
-                    if shift_pressed {
-                        let mut pan = pan_offset.lock().unwrap();
-                        *pan += delta * 0.01; 
-                    } else {
-                        let mut rot = rotation.lock().unwrap();
-                        *rot += Vec2::new(delta.x, delta.y) * 0.01; 
+                if mouse_middle_down && within_framebuffer {
+                    let mut last_mouse_pos = self.last_mouse_pos.lock().unwrap();
+                    if let Some(last_pos) = *last_mouse_pos {
+                        let delta_x = mouse_pos.0 - last_pos.0;
+                        let delta_y = -(mouse_pos.1 - last_pos.1);
+                
+                        if shift_pressed {
+                            let mut pan = pan_offset.lock().unwrap();
+                            *pan += Vec2::new(-delta_x, delta_y) * 0.01; 
+                        } else {
+                            let mut rot = rotation.lock().unwrap();
+                            *rot += Vec2::new(-delta_x, -delta_y) * 0.01; 
+                        }
                     }
-                }
-                *last_mouse_pos = Some(mouse_pos);
-            } else if mouse_left_down && within_framebuffer {
+                    *last_mouse_pos = Some(mouse_pos);
+                } else if mouse_left_down && within_framebuffer {
                 window.process_menu_click(mouse_pos.0, mouse_pos.1);
             } else {
                 *self.last_mouse_pos.lock().unwrap() = None;
