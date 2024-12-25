@@ -45,18 +45,6 @@ impl Window {
         self.bottom_bar_height
     }
 
-    pub fn render_sidebar(&mut self) {
-        let sidebar_color = 0x222222;
-    
-        for y in 0..self.framebuffer.height() {
-            for x in 0..self.sidebar_width {
-                self.framebuffer.set_pixel(x, y, sidebar_color);
-            }
-        }
-
-        self.menu.render_in_sidebar(&mut self.framebuffer, self.sidebar_width);
-    }
-
     pub fn render_bottom_bar(&mut self) {
         let bottom_color = 0x333333;
         for y in self.framebuffer.height()..(self.framebuffer.height() + self.bottom_bar_height) {
@@ -99,7 +87,7 @@ impl Window {
     
         for y in 0..self.framebuffer.height() {
             for x in 0..self.sidebar_width {
-                full_data[x + y * total_width] = 0x222222; 
+                full_data[x + y * total_width] = 0x555555; 
             }
         }
     
@@ -122,6 +110,8 @@ impl Window {
                     self.framebuffer.data[x + y * self.framebuffer.width()];
             }
         }
+
+        self.menu.render_in_sidebar(&mut full_data, self.sidebar_width, total_width, total_height);
     
         self.window
             .update_with_buffer(&full_data, total_width, total_height)

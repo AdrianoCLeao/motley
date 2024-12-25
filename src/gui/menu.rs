@@ -70,14 +70,21 @@ impl Menu {
         }
     }
 
-    pub fn render_in_sidebar(&self, framebuffer: &mut crate::gui::framebuffer::Framebuffer, sidebar_width: usize) {
+    pub fn render_in_sidebar(&self, full_data: &mut Vec<u32>, sidebar_width: usize, total_width: usize, total_height: usize) {
         let button_height = 40;
         let mut y_offset = 10;
 
         for item in &self.items {
-            for y in y_offset..(y_offset + button_height) {
-                for x in 10..(sidebar_width - 10) {
-                    framebuffer.set_pixel(x, y, 0xAAAAAA);
+            if y_offset >= total_height {
+                break;
+            }
+
+            let button_y_end = (y_offset + button_height).min(total_height);
+            let button_x_end = (sidebar_width - 10).min(total_width);
+
+            for y in y_offset..button_y_end {
+                for x in 10..button_x_end {
+                    full_data[x + y * total_width] = 0xAAAAAA;
                 }
             }
 
@@ -85,12 +92,16 @@ impl Menu {
             let label_x = 15;
             let label_y = y_offset + 25;
 
-            for (i, _) in item.label.chars().enumerate() {
-                let offset_x = label_x + i * 6;
-                framebuffer.set_pixel(offset_x, label_y, label_color);
+            if label_y < total_height {
+                for (i, _) in item.label.chars().enumerate() {
+                    let offset_x = label_x + i * 6;
+                    if offset_x < button_x_end {
+                        full_data[offset_x + label_y * total_width] = label_color;
+                    }
+                }
             }
 
-            y_offset += button_height + 10; 
+            y_offset += button_height + 10;
         }
     }
 

@@ -291,8 +291,6 @@ fn main() {
             &inv_trans_model_matrix
         );
 
-        window.render_menu();
-        window.render_sidebar();
         window.render_bottom_bar();
         window.display();
     }
