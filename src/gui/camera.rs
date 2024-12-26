@@ -55,10 +55,6 @@ impl Camera {
         self.up = up;
     }
 
-    pub fn up(&self) -> Vec3 {
-        self.up
-    }
-
     pub fn move_forward(&mut self, distance: f32) {
         let direction = (self.target - self.position).normalize();
         self.position += direction * distance;
@@ -85,23 +81,41 @@ impl Camera {
         self.target -= right * distance;
     }
 
-    pub fn zoom(&mut self, amount: f32) {
+    // Gira a câmera ao redor do ponto de destino
+    pub fn orbit(&mut self, delta_x: f32, delta_y: f32) {
         let direction = (self.target - self.position).normalize();
-        self.position += direction * amount;
-    }
+        let radius = (self.target - self.position).length();
 
-    pub fn rotate(&mut self, delta_pitch: f32, delta_yaw: f32) {
-        let direction = (self.target - self.position).normalize();
-        let right = direction.cross(self.up).normalize();
-        let pitch = delta_pitch.to_radians();
-        let yaw = delta_yaw.to_radians();
+        let yaw = delta_x; // Rotação ao redor do eixo Y
+        let pitch = delta_y; // Rotação ao redor do eixo X
 
-        let rotation_yaw = Mat4::from_axis_angle(self.up, yaw);
-        let rotation_pitch = Mat4::from_axis_angle(right, pitch);
-
-        let rotation_matrix = rotation_yaw * rotation_pitch;
+        let rotation_matrix = Mat4::from_rotation_y(yaw)
+            * Mat4::from_rotation_x(pitch);
 
         let new_direction = rotation_matrix.transform_vector3(direction);
-        self.target = self.position + new_direction;
+        self.position = self.target - new_direction * radius;
+    }
+
+    // Move a câmera lateralmente e verticalmente
+    pub fn pan(&mut self, delta_x: f32, delta_y: f32, right: Vec3, up: Vec3) {
+        let pan_offset = right * delta_x + up * delta_y;
+        self.position += pan_offset;
+        self.target += pan_offset;
+    }
+
+    pub fn zoom(&mut self, amount: f32) {
+        let direction = (self.target - self.position).normalize();
+        let distance = (self.target - self.position).length();
+
+        let new_distance = (distance + amount).clamp(1.0, 50.0); 
+        self.position = self.target - direction * new_distance;
+    }
+
+    pub fn right(&self) -> Vec3 {
+        self.view_matrix().x_axis.truncate().normalize()
+    }
+
+    pub fn up(&self) -> Vec3 {
+        self.view_matrix().y_axis.truncate().normalize()
     }
 }

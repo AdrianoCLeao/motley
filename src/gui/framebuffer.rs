@@ -1,3 +1,5 @@
+use glam::{Mat4, Vec3};
+
 pub struct Framebuffer {
     pub data: Vec<u32>,
     pub width: usize,
@@ -6,14 +8,11 @@ pub struct Framebuffer {
 
 impl Framebuffer {
     pub fn new(width: usize, height: usize) -> Self {
-        let mut framebuffer = Framebuffer {
+        Framebuffer {
             data: vec![0; width * height],
             width,
             height,
-        };
-        framebuffer.render_axes(); 
-        framebuffer.render_orientation_cube(50);
-        framebuffer
+        }
     }
 
     pub fn width(&self) -> usize {
@@ -44,56 +43,71 @@ impl Framebuffer {
         self.data.fill(value);
     }
 
-    pub fn render_axes(&mut self) {
-        let x_axis_color = 0xFF0000;
-        let y_axis_color = 0x00FF00; 
-        let z_axis_color = 0x0000FF; 
+    pub fn render_axes(&mut self, camera_view_proj: &Mat4) {
+        // Cores dos eixos
+        let x_axis_color = 0xFF0000; // Vermelho para X
+        let y_axis_color = 0x00FF00; // Verde para Y
+        let z_axis_color = 0x0000FF; // Azul para Z
 
-        let center_x = self.width / 2;
-        let center_y = self.height / 2;
+        // Defina os pontos extremos dos eixos em 3D
+        let origin = Vec3::ZERO;
+        let x_axis = Vec3::new(1.0, 0.0, 0.0);
+        let y_axis = Vec3::new(0.0, 1.0, 0.0);
+        let z_axis = Vec3::new(0.0, 0.0, 1.0);
 
-        for x in 0..self.width {
-            self.set_pixel(x, center_y, x_axis_color);
-        }
+        // Projete os pontos no espaço da tela
+        let origin_screen = self.project_to_screen(&origin, camera_view_proj);
+        let x_screen = self.project_to_screen(&x_axis, camera_view_proj);
+        let y_screen = self.project_to_screen(&y_axis, camera_view_proj);
+        let z_screen = self.project_to_screen(&z_axis, camera_view_proj);
 
-        for y in 0..self.height {
-            self.set_pixel(center_x, y, y_axis_color);
-        }
-
-        let z_axis_length = self.width.min(self.height) / 2;
-        for i in 0..z_axis_length {
-            let z_x = (center_x + i).min(self.width - 1);
-            let z_y = (center_y + i).min(self.height - 1);
-            self.set_pixel(z_x, z_y, z_axis_color);
-        }
+        // Renderize as linhas dos eixos
+        self.draw_line(origin_screen, x_screen, x_axis_color);
+        self.draw_line(origin_screen, y_screen, y_axis_color);
+        self.draw_line(origin_screen, z_screen, z_axis_color);
     }
 
-    pub fn render_orientation_cube(&mut self, cube_size: usize) {
-        let offset_x = self.width - cube_size - 10;
-        let offset_y = self.height - cube_size - 10;
+    fn project_to_screen(&self, point: &Vec3, camera_view_proj: &Mat4) -> (usize, usize) {
+        let clip_space = *camera_view_proj * point.extend(1.0);
+        let ndc_space = clip_space.truncate() / clip_space.w;
 
-        for y in offset_y..(offset_y + cube_size) {
-            for x in offset_x..(offset_x + cube_size) {
-                self.set_pixel(x, y, 0x333333);
+        let x_screen = ((ndc_space.x + 1.0) * 0.5 * self.width as f32).round() as usize;
+        let y_screen = ((1.0 - (ndc_space.y + 1.0) * 0.5) * self.height as f32).round() as usize;
+
+        (x_screen.min(self.width - 1), y_screen.min(self.height - 1))
+    }
+
+    fn draw_line(&mut self, start: (usize, usize), end: (usize, usize), color: u32) {
+        let (x0, y0) = start;
+        let (x1, y1) = end;
+
+        let dx = (x1 as isize - x0 as isize).abs();
+        let dy = (y1 as isize - y0 as isize).abs();
+
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let sy = if y0 < y1 { 1 } else { -1 };
+
+        let mut err = dx - dy;
+
+        let mut x = x0 as isize;
+        let mut y = y0 as isize;
+
+        while x != x1 as isize || y != y1 as isize {
+            if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
+                self.set_pixel(x as usize, y as usize, color);
             }
-        }
 
-        let center_x = offset_x + cube_size / 2;
-        let center_y = offset_y + cube_size / 2;
+            let e2 = err * 2;
 
-        for x in center_x..(center_x + cube_size / 4).min(self.width) {
-            self.set_pixel(x, center_y, 0xFF0000);
-        }
+            if e2 > -dy {
+                err -= dy;
+                x += sx;
+            }
 
-        for y in (center_y - cube_size / 4).max(0)..center_y {
-            self.set_pixel(center_x, y, 0x00FF00);
-        }
-
-        let z_length = cube_size / 4;
-        for i in 0..z_length {
-            let z_x = (center_x + i).min(self.width - 1);
-            let z_y = (center_y + i).min(self.height - 1);
-            self.set_pixel(z_x, z_y, 0x0000FF);
+            if e2 < dx {
+                err += dx;
+                y += sy;
+            }
         }
     }
 }

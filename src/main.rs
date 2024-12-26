@@ -258,9 +258,6 @@ fn main() {
 
         mouse_handler.handle(
             &mut window,
-            fb_width,
-            fb_height,
-            sidebar_width,
             Arc::clone(&camera),
         );
 
@@ -271,11 +268,10 @@ fn main() {
 
         framebuffer.clear(0x141414);
         depth_buffer.clear(u32::MAX);
-        framebuffer.render_axes();
-        framebuffer.render_orientation_cube(50);
 
         let cam = camera.lock().unwrap();
         let view_projection_matrix = cam.view_projection_matrix();
+        framebuffer.render_axes(&view_projection_matrix);
         let model_matrix = Mat4::IDENTITY;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
 
