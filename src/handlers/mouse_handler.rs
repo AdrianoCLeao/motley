@@ -32,13 +32,12 @@ impl MouseHandler {
                 if mouse_middle_down {
                     let mut cam = camera.lock().unwrap();
                     if shift_pressed {
-                        // Pan: move lateralmente e verticalmente
+
                         let pan_speed = 0.01;
                         let right = cam.right();
                         let up = cam.up();
                         cam.pan(-delta.x * pan_speed, delta.y * pan_speed, right, up);
                     } else {
-                        // Rotação: orbita ao redor do modelo
                         let rotation_speed = 0.01;
                         cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed);
                     }
@@ -47,7 +46,7 @@ impl MouseHandler {
 
             if scroll_delta != 0.0 {
                 let mut cam = camera.lock().unwrap();
-                cam.zoom(-scroll_delta * 0.1); // Zoom mais intuitivo
+                cam.zoom(-scroll_delta * 0.1); 
             }
 
             *last_mouse_pos = Some(mouse_pos);

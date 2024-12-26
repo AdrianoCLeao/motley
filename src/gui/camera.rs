@@ -81,13 +81,12 @@ impl Camera {
         self.target -= right * distance;
     }
 
-    // Gira a câmera ao redor do ponto de destino
     pub fn orbit(&mut self, delta_x: f32, delta_y: f32) {
         let direction = (self.target - self.position).normalize();
         let radius = (self.target - self.position).length();
 
-        let yaw = delta_x; // Rotação ao redor do eixo Y
-        let pitch = delta_y; // Rotação ao redor do eixo X
+        let yaw = delta_x;
+        let pitch = delta_y; 
 
         let rotation_matrix = Mat4::from_rotation_y(yaw)
             * Mat4::from_rotation_x(pitch);
@@ -96,7 +95,6 @@ impl Camera {
         self.position = self.target - new_direction * radius;
     }
 
-    // Move a câmera lateralmente e verticalmente
     pub fn pan(&mut self, delta_x: f32, delta_y: f32, right: Vec3, up: Vec3) {
         let pan_offset = right * delta_x + up * delta_y;
         self.position += pan_offset;

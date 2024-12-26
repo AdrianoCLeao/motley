@@ -1,4 +1,4 @@
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec2, Vec3, Vec4};
 
 pub struct Framebuffer {
     pub data: Vec<u32>,
@@ -43,71 +43,78 @@ impl Framebuffer {
         self.data.fill(value);
     }
 
-    pub fn render_axes(&mut self, camera_view_proj: &Mat4) {
-        // Cores dos eixos
-        let x_axis_color = 0xFF0000; // Vermelho para X
-        let y_axis_color = 0x00FF00; // Verde para Y
-        let z_axis_color = 0x0000FF; // Azul para Z
+    pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
+        let axis_length = 5.0;
 
-        // Defina os pontos extremos dos eixos em 3D
-        let origin = Vec3::ZERO;
-        let x_axis = Vec3::new(1.0, 0.0, 0.0);
-        let y_axis = Vec3::new(0.0, 1.0, 0.0);
-        let z_axis = Vec3::new(0.0, 0.0, 1.0);
+        self.draw_line_3d(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(axis_length, 0.0, 0.0),
+            0xFF0000,
+            view_projection_matrix,
+        );
 
-        // Projete os pontos no espaço da tela
-        let origin_screen = self.project_to_screen(&origin, camera_view_proj);
-        let x_screen = self.project_to_screen(&x_axis, camera_view_proj);
-        let y_screen = self.project_to_screen(&y_axis, camera_view_proj);
-        let z_screen = self.project_to_screen(&z_axis, camera_view_proj);
+        self.draw_line_3d(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, axis_length, 0.0),
+            0x00FF00,
+            view_projection_matrix,
+        );
 
-        // Renderize as linhas dos eixos
-        self.draw_line(origin_screen, x_screen, x_axis_color);
-        self.draw_line(origin_screen, y_screen, y_axis_color);
-        self.draw_line(origin_screen, z_screen, z_axis_color);
+        self.draw_line_3d(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, axis_length),
+            0x0000FF,
+            view_projection_matrix,
+        );
     }
 
-    fn project_to_screen(&self, point: &Vec3, camera_view_proj: &Mat4) -> (usize, usize) {
-        let clip_space = *camera_view_proj * point.extend(1.0);
-        let ndc_space = clip_space.truncate() / clip_space.w;
+    pub fn draw_line_3d(
+        &mut self,
+        start: Vec3,
+        end: Vec3,
+        color: u32,
+        view_projection_matrix: &Mat4,
+    ) {
+        let start_projected = *view_projection_matrix * Vec4::from((start, 1.0));
+        let end_projected = *view_projection_matrix * Vec4::from((end, 1.0));
 
-        let x_screen = ((ndc_space.x + 1.0) * 0.5 * self.width as f32).round() as usize;
-        let y_screen = ((1.0 - (ndc_space.y + 1.0) * 0.5) * self.height as f32).round() as usize;
+        if start_projected.w <= 0.0 || end_projected.w <= 0.0 {
+            return;
+        }
 
-        (x_screen.min(self.width - 1), y_screen.min(self.height - 1))
+        let start_ndc = Vec3::new(
+            start_projected.x / start_projected.w,
+            start_projected.y / start_projected.w,
+            start_projected.z / start_projected.w,
+        );
+
+        let end_ndc = Vec3::new(
+            end_projected.x / end_projected.w,
+            end_projected.y / end_projected.w,
+            end_projected.z / end_projected.w,
+        );
+
+        let screen_start = Vec2::new(
+            (start_ndc.x * 0.5 + 0.5) * self.width as f32,
+            (1.0 - (start_ndc.y * 0.5 + 0.5)) * self.height as f32,
+        );
+        let screen_end = Vec2::new(
+            (end_ndc.x * 0.5 + 0.5) * self.width as f32,
+            (1.0 - (end_ndc.y * 0.5 + 0.5)) * self.height as f32,
+        );
+
+        self.draw_line(screen_start, screen_end, color);
     }
 
-    fn draw_line(&mut self, start: (usize, usize), end: (usize, usize), color: u32) {
-        let (x0, y0) = start;
-        let (x1, y1) = end;
+    pub fn draw_line(&mut self, start: Vec2, end: Vec2, color: u32) {
+        let delta = end - start;
+        let steps = delta.length().ceil() as usize;
 
-        let dx = (x1 as isize - x0 as isize).abs();
-        let dy = (y1 as isize - y0 as isize).abs();
-
-        let sx = if x0 < x1 { 1 } else { -1 };
-        let sy = if y0 < y1 { 1 } else { -1 };
-
-        let mut err = dx - dy;
-
-        let mut x = x0 as isize;
-        let mut y = y0 as isize;
-
-        while x != x1 as isize || y != y1 as isize {
-            if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
-                self.set_pixel(x as usize, y as usize, color);
-            }
-
-            let e2 = err * 2;
-
-            if e2 > -dy {
-                err -= dy;
-                x += sx;
-            }
-
-            if e2 < dx {
-                err += dx;
-                y += sy;
-            }
+        for i in 0..steps {
+            let t = i as f32 / steps as f32;
+            let x = (start.x + t * delta.x).round() as usize;
+            let y = (start.y + t * delta.y).round() as usize;
+            self.set_pixel(x, y, color);
         }
     }
 }
