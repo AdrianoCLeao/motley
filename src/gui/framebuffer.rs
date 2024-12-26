@@ -1,3 +1,5 @@
+use glam::{Mat4, Vec2, Vec3, Vec4};
+
 pub struct Framebuffer {
     pub data: Vec<u32>,
     pub width: usize,
@@ -6,14 +8,11 @@ pub struct Framebuffer {
 
 impl Framebuffer {
     pub fn new(width: usize, height: usize) -> Self {
-        let mut framebuffer = Framebuffer {
+        Framebuffer {
             data: vec![0; width * height],
             width,
             height,
-        };
-        framebuffer.render_grid(); 
-        framebuffer.render_orientation_cube(50);
-        framebuffer
+        }
     }
 
     pub fn width(&self) -> usize {
@@ -44,61 +43,78 @@ impl Framebuffer {
         self.data.fill(value);
     }
 
-    pub fn render_grid(&mut self) {
-        let grid_color_primary = 0xCCCCCC; 
-        let grid_color_secondary = 0x888888; 
-        let center_x = self.width as isize / 2;
-        let center_y = self.height as isize / 2;
-        let cell_size = 20; 
+    pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
+        let axis_length = 5.0;
 
-        for y in (0..self.height).step_by(cell_size) {
-            let line_color = if y % (cell_size * 5) == 0 { grid_color_primary } else { grid_color_secondary };
-            for x in 0..self.width {
-                self.set_pixel(x, y, line_color);
-            }
-        }
+        self.draw_line_3d(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(axis_length, 0.0, 0.0),
+            0xFF0000,
+            view_projection_matrix,
+        );
 
-        for x in (0..self.width).step_by(cell_size) {
-            let line_color = if x % (cell_size * 5) == 0 { grid_color_primary } else { grid_color_secondary };
-            for y in 0..self.height {
-                self.set_pixel(x, y, line_color);
-            }
-        }
+        self.draw_line_3d(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, axis_length, 0.0),
+            0x00FF00,
+            view_projection_matrix,
+        );
 
-        for x in 0..self.width {
-            self.set_pixel(x, center_y as usize, 0xFF0000); 
-        }
-        for y in 0..self.height {
-            self.set_pixel(center_x as usize, y, 0x00FF00); 
-        }
+        self.draw_line_3d(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, axis_length),
+            0x0000FF,
+            view_projection_matrix,
+        );
     }
 
-    pub fn render_orientation_cube(&mut self, cube_size: usize) {
-        let offset_x = self.width - cube_size - 10;
-        let offset_y = self.height - cube_size - 10;
+    pub fn draw_line_3d(
+        &mut self,
+        start: Vec3,
+        end: Vec3,
+        color: u32,
+        view_projection_matrix: &Mat4,
+    ) {
+        let start_projected = *view_projection_matrix * Vec4::from((start, 1.0));
+        let end_projected = *view_projection_matrix * Vec4::from((end, 1.0));
 
-        for y in offset_y..(offset_y + cube_size) {
-            for x in offset_x..(offset_x + cube_size) {
-                self.set_pixel(x, y, 0x333333);
-            }
+        if start_projected.w <= 0.0 || end_projected.w <= 0.0 {
+            return;
         }
 
-        let center_x = offset_x + cube_size / 2;
-        let center_y = offset_y + cube_size / 2;
+        let start_ndc = Vec3::new(
+            start_projected.x / start_projected.w,
+            start_projected.y / start_projected.w,
+            start_projected.z / start_projected.w,
+        );
 
-        for x in center_x..(center_x + cube_size / 4).min(self.width) {
-            self.set_pixel(x, center_y, 0xFF0000);
-        }
+        let end_ndc = Vec3::new(
+            end_projected.x / end_projected.w,
+            end_projected.y / end_projected.w,
+            end_projected.z / end_projected.w,
+        );
 
-        for y in (center_y - cube_size / 4).max(0)..center_y {
-            self.set_pixel(center_x, y, 0x00FF00);
-        }
+        let screen_start = Vec2::new(
+            (start_ndc.x * 0.5 + 0.5) * self.width as f32,
+            (1.0 - (start_ndc.y * 0.5 + 0.5)) * self.height as f32,
+        );
+        let screen_end = Vec2::new(
+            (end_ndc.x * 0.5 + 0.5) * self.width as f32,
+            (1.0 - (end_ndc.y * 0.5 + 0.5)) * self.height as f32,
+        );
 
-        let z_length = cube_size / 4;
-        for i in 0..z_length {
-            let z_x = (center_x + i).min(self.width - 1);
-            let z_y = (center_y + i).min(self.height - 1);
-            self.set_pixel(z_x, z_y, 0x0000FF);
+        self.draw_line(screen_start, screen_end, color);
+    }
+
+    pub fn draw_line(&mut self, start: Vec2, end: Vec2, color: u32) {
+        let delta = end - start;
+        let steps = delta.length().ceil() as usize;
+
+        for i in 0..steps {
+            let t = i as f32 / steps as f32;
+            let x = (start.x + t * delta.x).round() as usize;
+            let y = (start.y + t * delta.y).round() as usize;
+            self.set_pixel(x, y, color);
         }
     }
 }

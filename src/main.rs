@@ -1,9 +1,10 @@
 use glam::*;
+use gui::camera::Camera;
 use std::sync::{Arc, Mutex};
 
 pub mod gui;
 use gui::components::setup_menu;
-use gui::{Framebuffer, Window};
+use gui::{Framebuffer, Window, camera};
 
 pub mod model;
 use model::{load_model, Material, Model, Vertex};
@@ -232,17 +233,23 @@ and continuously renders it to the screen while applying transformations for rot
 */
 
 fn main() {
-    let mut window: Window = Window::new("Motley Project", 800, 600);
+    let mut window: Window = Window::new("Motley Project", 1200, 800);
     let (fb_width, fb_height) = window.framebuffer_area();
     let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
     let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
-    let rotation = Arc::new(Mutex::new(Vec2::ZERO));
-    let zoom = Arc::new(Mutex::new(2.5));
-    let pan_offset = Arc::new(Mutex::new(Vec2::ZERO));
+    let camera = Arc::new(Mutex::new(Camera::new(
+        Vec3::new(0.0, 0.0, 5.5),
+        Vec3::ZERO,
+        Vec3::Y, 
+        60.0,             
+        fb_width as f32 / fb_height as f32,
+        0.1,         
+        300.0,      
+    )));
 
-    setup_menu(&mut window, Arc::clone(&rotation), Arc::clone(&zoom));
+    setup_menu(&mut window, Arc::clone(&camera));
 
     let mouse_handler = MouseHandler::new();
 
@@ -251,12 +258,7 @@ fn main() {
 
         mouse_handler.handle(
             &mut window,
-            fb_width,
-            fb_height,
-            sidebar_width,
-            Arc::clone(&rotation),
-            Arc::clone(&zoom),
-            Arc::clone(&pan_offset),
+            Arc::clone(&camera),
         );
 
         let framebuffer = window.framebuffer();
@@ -266,35 +268,18 @@ fn main() {
 
         framebuffer.clear(0x141414);
         depth_buffer.clear(u32::MAX);
-        framebuffer.render_grid();
-        framebuffer.render_orientation_cube(50);
 
-        let aspect_ratio = framebuffer.width() as f32 / framebuffer.height() as f32;
-
-        let pan = {
-            let pan_offset_guard = pan_offset.lock().unwrap();
-            (pan_offset_guard.x, pan_offset_guard.y)
-        };
-        
-        let zoom_value = {
-            let zoom_guard = zoom.lock().unwrap();
-            *zoom_guard
-        };
-
-        let rotation = rotation.lock().unwrap();
-        let model_matrix = Mat4::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), rotation.x)
-            * Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), rotation.y);
-        let view_matrix = Mat4::from_translation(Vec3::new(pan.0, pan.1, -zoom_value));
-
-        let proj_matrix = Mat4::perspective_rh((60.0f32).to_radians(), aspect_ratio, 0.01, 300.0);
-        let mvp_matrix = proj_matrix * view_matrix * model_matrix;
+        let cam = camera.lock().unwrap();
+        let view_projection_matrix = cam.view_projection_matrix();
+        framebuffer.render_3d_axes(&view_projection_matrix);
+        let model_matrix = Mat4::IDENTITY;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
 
         draw_model(
             framebuffer,
             &mut depth_buffer,
             &model,
-            &mvp_matrix,
+            &view_projection_matrix,
             &inv_trans_model_matrix,
         );
 
