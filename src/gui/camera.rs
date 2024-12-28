@@ -12,17 +12,8 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(
-        position: Vec3,
-        target: Vec3,
-        up: Vec3,
-        fov: f32,
-        aspect_ratio: f32,
-        near: f32,
-        far: f32,
-    ) -> Self {
-        let rotation = Vec3::ZERO;
-        Camera {
+    pub fn new(position: Vec3, target: Vec3, up: Vec3, fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Self {
+        let mut camera = Camera {
             position,
             target,
             up,
@@ -30,8 +21,27 @@ impl Camera {
             aspect_ratio,
             near,
             far,
-            rotation,
-        }
+            rotation: Vec3::ZERO,
+        };
+
+        camera.set_rotation_from_degrees(70.0, 180.0);
+        camera.position = Vec3::new(0.0, -11.0, 4.5);
+
+        camera
+    }
+
+    pub fn set_rotation_from_degrees(&mut self, x_deg: f32, y_deg: f32) {
+        self.rotation.x = x_deg.to_radians();
+        self.rotation.y = y_deg.to_radians();
+
+        let radius = (self.target - self.position).length();
+        let new_position = Vec3::new(
+            radius * self.rotation.y.sin() * self.rotation.x.cos(),
+            radius * self.rotation.x.sin(),
+            radius * self.rotation.y.cos() * self.rotation.x.cos(),
+        );
+
+        self.position = self.target - new_position;
     }
 
     pub fn view_matrix(&self) -> Mat4 {

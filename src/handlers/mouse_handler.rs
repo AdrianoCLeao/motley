@@ -31,10 +31,10 @@ impl MouseHandler {
                 if mouse_middle_down {
                     let mut cam = camera.lock().unwrap();
                     if shift_pressed {
-                        let pan_speed = 0.01;
+                        let pan_speed = 0.3;
                         cam.pan(-delta.x * pan_speed, delta.y * pan_speed);
                     } else {
-                        let rotation_speed = 0.10;
+                        let rotation_speed = 0.3;
                         cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed);
                     }
                 }
