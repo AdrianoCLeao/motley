@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use glam::{Vec2, Vec3};
+use glam::Vec2;
 use crate::camera::Camera;
 use crate::gui::Window;
 
@@ -31,13 +31,10 @@ impl MouseHandler {
                 if mouse_middle_down {
                     let mut cam = camera.lock().unwrap();
                     if shift_pressed {
-
                         let pan_speed = 0.01;
-                        let right = cam.right();
-                        let up = cam.up();
-                        cam.pan(-delta.x * pan_speed, delta.y * pan_speed, right, up);
+                        cam.pan(-delta.x * pan_speed, delta.y * pan_speed);
                     } else {
-                        let rotation_speed = 0.01;
+                        let rotation_speed = 0.10;
                         cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed);
                     }
                 }
@@ -45,7 +42,7 @@ impl MouseHandler {
 
             if scroll_delta != 0.0 {
                 let mut cam = camera.lock().unwrap();
-                cam.zoom(-scroll_delta * 0.1); 
+                cam.zoom(-scroll_delta * 0.1);
             }
 
             *last_mouse_pos = Some(mouse_pos);

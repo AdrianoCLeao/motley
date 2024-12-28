@@ -240,7 +240,7 @@ fn main() {
     let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
     let camera = Arc::new(Mutex::new(Camera::new(
-        Vec3::new(0.0, 0.0, 5.5),
+        Vec3::new(5.0, 0.0, 5.5),
         Vec3::ZERO,
         Vec3::Y, 
         60.0,             
@@ -254,8 +254,6 @@ fn main() {
     let mouse_handler = MouseHandler::new();
 
     while !window.should_close() {
-        let sidebar_width = window.sidebar_width();
-
         mouse_handler.handle(
             &mut window,
             Arc::clone(&camera),
@@ -275,7 +273,7 @@ fn main() {
 
         let rotation_matrix = cam.view_matrix().inverse();
         framebuffer.render_compass(&rotation_matrix, 50);
-        
+
         let model_matrix = Mat4::IDENTITY;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
 

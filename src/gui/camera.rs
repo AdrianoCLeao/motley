@@ -8,10 +8,20 @@ pub struct Camera {
     pub aspect_ratio: f32,
     pub near: f32,
     pub far: f32,
+    pub rotation: Vec3,
 }
 
 impl Camera {
-    pub fn new(position: Vec3, target: Vec3, up: Vec3, fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Self {
+    pub fn new(
+        position: Vec3,
+        target: Vec3,
+        up: Vec3,
+        fov: f32,
+        aspect_ratio: f32,
+        near: f32,
+        far: f32,
+    ) -> Self {
+        let rotation = Vec3::ZERO;
         Camera {
             position,
             target,
@@ -20,6 +30,7 @@ impl Camera {
             aspect_ratio,
             near,
             far,
+            rotation,
         }
     }
 
@@ -51,52 +62,26 @@ impl Camera {
         self.target
     }
 
-    pub fn set_up(&mut self, up: Vec3) {
-        self.up = up;
-    }
-
-    pub fn move_forward(&mut self, distance: f32) {
-        let direction = (self.target - self.position).normalize();
-        self.position += direction * distance;
-        self.target += direction * distance;
-    }
-
-    pub fn move_backward(&mut self, distance: f32) {
-        let direction = (self.target - self.position).normalize();
-        self.position -= direction * distance;
-        self.target -= direction * distance;
-    }
-
-    pub fn move_right(&mut self, distance: f32) {
-        let direction = (self.target - self.position).normalize();
-        let right = direction.cross(self.up).normalize();
-        self.position += right * distance;
-        self.target += right * distance;
-    }
-
-    pub fn move_left(&mut self, distance: f32) {
-        let direction = (self.target - self.position).normalize();
-        let right = direction.cross(self.up).normalize();
-        self.position -= right * distance;
-        self.target -= right * distance;
-    }
-
     pub fn orbit(&mut self, delta_x: f32, delta_y: f32) {
-        let direction = (self.target - self.position).normalize();
         let radius = (self.target - self.position).length();
 
-        let yaw = delta_x;
-        let pitch = delta_y; 
+        self.rotation.y += delta_x * 0.01; 
+        self.rotation.x = (self.rotation.x + delta_y * 0.01).clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
 
-        let rotation_matrix = Mat4::from_rotation_y(yaw)
-            * Mat4::from_rotation_x(pitch);
+        let new_position = Vec3::new(
+            radius * self.rotation.y.sin() * self.rotation.x.cos(),
+            radius * self.rotation.x.sin(),
+            radius * self.rotation.y.cos() * self.rotation.x.cos(),
+        );
 
-        let new_direction = rotation_matrix.transform_vector3(direction);
-        self.position = self.target - new_direction * radius;
+        self.position = self.target - new_position;
     }
 
-    pub fn pan(&mut self, delta_x: f32, delta_y: f32, right: Vec3, up: Vec3) {
-        let pan_offset = right * delta_x + up * delta_y;
+    pub fn pan(&mut self, delta_x: f32, delta_y: f32) {
+        let right = self.right();
+        let up = self.up();
+
+        let pan_offset = right * delta_x * 0.01 + up * delta_y * 0.01;
         self.position += pan_offset;
         self.target += pan_offset;
     }
@@ -105,7 +90,7 @@ impl Camera {
         let direction = (self.target - self.position).normalize();
         let distance = (self.target - self.position).length();
 
-        let new_distance = (distance + amount).clamp(1.0, 50.0); 
+        let new_distance = (distance + amount).clamp(1.0, 50.0);
         self.position = self.target - direction * new_distance;
     }
 
