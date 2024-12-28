@@ -35,7 +35,12 @@ impl MouseHandler {
                         cam.pan(-delta.x * pan_speed, delta.y * pan_speed);
                     } else {
                         let rotation_speed = 0.3;
-                        cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed);
+                        let delta_z = if window.is_key_down(minifb::Key::LeftAlt) {
+                            Some(delta.x)
+                        } else {
+                            None
+                        };
+                        cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed, delta_z);
                     }
                 }
             }

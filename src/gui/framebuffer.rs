@@ -67,13 +67,13 @@ impl Framebuffer {
         for y in (-size as i32)..=(size as i32) {
             let start = Vec3::new(-size, y as f32, 0.0);
             let end = Vec3::new(size, y as f32, 0.0);
-            self.draw_line_3d(start, end, 0x888888, view_projection_matrix);
+            self.draw_line_3d(start, end, 0x444444, view_projection_matrix);
         }
     
         for x in (-size as i32)..=(size as i32) {
             let start = Vec3::new(x as f32, -size, 0.0);
             let end = Vec3::new(x as f32, size, 0.0);
-            self.draw_line_3d(start, end, 0x888888, view_projection_matrix);
+            self.draw_line_3d(start, end, 0x444444, view_projection_matrix);
         }
     }    
 

@@ -72,18 +72,26 @@ impl Camera {
         self.target
     }
 
-    pub fn orbit(&mut self, delta_x: f32, delta_y: f32) {
+    pub fn orbit(&mut self, delta_x: f32, delta_y: f32, delta_z: Option<f32>) {
         let radius = (self.target - self.position).length();
+    
 
-        self.rotation.y += delta_x * 0.01; 
-        self.rotation.x = (self.rotation.x + delta_y * 0.01).clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
-
+        self.rotation.y += delta_x * 0.01;
+        self.rotation.x = (self.rotation.x + delta_y * 0.01).clamp(
+            -std::f32::consts::FRAC_PI_2,
+            std::f32::consts::FRAC_PI_2,
+        ); 
+    
+        if let Some(delta_z) = delta_z {
+            self.rotation.z += delta_z * 0.01; 
+        }
+    
         let new_position = Vec3::new(
             radius * self.rotation.y.sin() * self.rotation.x.cos(),
             radius * self.rotation.x.sin(),
             radius * self.rotation.y.cos() * self.rotation.x.cos(),
         );
-
+    
         self.position = self.target - new_position;
     }
 
