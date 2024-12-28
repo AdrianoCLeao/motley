@@ -272,6 +272,10 @@ fn main() {
         let cam = camera.lock().unwrap();
         let view_projection_matrix = cam.view_projection_matrix();
         framebuffer.render_3d_axes(&view_projection_matrix);
+
+        let rotation_matrix = cam.view_matrix().inverse();
+        framebuffer.render_compass(&rotation_matrix, 50);
+        
         let model_matrix = Mat4::IDENTITY;
         let inv_trans_model_matrix = model_matrix.inverse().transpose();
 
