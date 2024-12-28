@@ -125,30 +125,21 @@ impl Framebuffer {
     
         let axis_length = size as f32 / 2.0;
     
-        // Define os eixos locais
         let x_axis = Vec3::new(axis_length, 0.0, 0.0);
         let y_axis = Vec3::new(0.0, -axis_length, 0.0);
         let z_axis = Vec3::new(axis_length * 0.7, axis_length * 0.7, 0.0);
-    
-        // Aplica a rotação da câmera nos eixos
+
         let rotated_x = camera_rotation.transform_point3(x_axis);
         let rotated_y = camera_rotation.transform_point3(y_axis);
         let rotated_z = camera_rotation.transform_point3(z_axis);
     
-        // Projeta os eixos na tela
         let x_end = center + Vec2::new(rotated_x.x, -rotated_x.y);
         let y_end = center + Vec2::new(rotated_y.x, -rotated_y.y);
         let z_end = center + Vec2::new(rotated_z.x, -rotated_z.y);
     
-        // Desenha os eixos
         self.draw_line_2d(center, x_end, 0xFF0000);
         self.draw_line_2d(center, y_end, 0x00FF00);
         self.draw_line_2d(center, z_end, 0x0000FF);
-    
-        // Adiciona as labels
-        self.draw_label((x_end.x as usize, x_end.y as usize), "X", 0xFF0000);
-        self.draw_label((y_end.x as usize, y_end.y as usize), "Y", 0x00FF00);
-        self.draw_label((z_end.x as usize, z_end.y as usize), "Z", 0x0000FF);
     }
 
     pub fn draw_line_2d(&mut self, start: Vec2, end: Vec2, color: u32) {
@@ -160,19 +151,6 @@ impl Framebuffer {
             let x = (start.x + t * delta.x).round() as usize;
             let y = (start.y + t * delta.y).round() as usize;
             self.set_pixel(x, y, color);
-        }
-    }
-
-    pub fn draw_label(&mut self, position: (usize, usize), label: &str, color: u32) {
-        let (x, y) = position;
-
-        for (i, c) in label.chars().enumerate() {
-            let char_x = x + i * 6; 
-            let char_y = y;
-
-            if char_x < self.width && char_y < self.height {
-                self.set_pixel(char_x, char_y, color); 
-            }
         }
     }
 }
