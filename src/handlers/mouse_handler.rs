@@ -20,7 +20,6 @@ impl MouseHandler {
         camera: Arc<Mutex<Camera>>,
     ) {
         if let Some(mouse_pos) = window.get_mouse_pos() {
-            let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
             let mouse_middle_down = window.is_mouse_down(minifb::MouseButton::Middle);
             let shift_pressed = window.is_key_down(minifb::Key::LeftShift) || window.is_key_down(minifb::Key::RightShift);
             let scroll_delta = window.get_scroll_wheel();
