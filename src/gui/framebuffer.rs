@@ -44,7 +44,7 @@ impl Framebuffer {
     }
 
     pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
-        let axis_length = 5.0;
+        let axis_length = 50.0;
 
         self.draw_line_3d(
             Vec3::new(0.0, 0.0, 0.0),
@@ -60,13 +60,22 @@ impl Framebuffer {
             view_projection_matrix,
         );
 
-        self.draw_line_3d(
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, axis_length),
-            0x0000FF,
-            view_projection_matrix,
-        );
+        self.render_grid(view_projection_matrix, 10.0);
     }
+
+    pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
+        for y in (-size as i32)..=(size as i32) {
+            let start = Vec3::new(-size, y as f32, 0.0);
+            let end = Vec3::new(size, y as f32, 0.0);
+            self.draw_line_3d(start, end, 0x888888, view_projection_matrix);
+        }
+    
+        for x in (-size as i32)..=(size as i32) {
+            let start = Vec3::new(x as f32, -size, 0.0);
+            let end = Vec3::new(x as f32, size, 0.0);
+            self.draw_line_3d(start, end, 0x888888, view_projection_matrix);
+        }
+    }    
 
     pub fn draw_line_3d(
         &mut self,
