@@ -44,46 +44,46 @@ impl Framebuffer {
     }
 
     pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
-        let axis_length = 50.0;
+        let axis_length = 15.0;
     
-        // Eixo X (Vermelho)
         self.draw_line_3d(
             Vec3::new(-axis_length, 0.0, 0.0),
             Vec3::new(axis_length, 0.0, 0.0),
-            0xFF0000,
+            0xA63737,
             view_projection_matrix,
+            false, 
         );
     
-        // Eixo Y (Azul)
         self.draw_line_3d(
             Vec3::new(0.0, 0.0, -axis_length),
             Vec3::new(0.0, 0.0, axis_length),
-            0x00FF00,
+            0x468E2C,
             view_projection_matrix,
+            false, 
         );
     
-        self.render_grid(view_projection_matrix, 10.0);
+        self.render_grid(view_projection_matrix, 15.0);
     }
-
+    
     pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
         for x in (-size as i32)..=(size as i32) {
             if x == 0 {
-                continue; 
+                continue;
             }
             let start = Vec3::new(x as f32, 0.0, -size);
             let end = Vec3::new(x as f32, 0.0, size);
-            self.draw_line_3d(start, end, 0x444444, view_projection_matrix);
+            self.draw_line_3d(start, end, 0x444444, view_projection_matrix, true);
         }
     
         for z in (-size as i32)..=(size as i32) {
             if z == 0 {
-                continue; 
+                continue;
             }
             let start = Vec3::new(-size, 0.0, z as f32);
             let end = Vec3::new(size, 0.0, z as f32);
-            self.draw_line_3d(start, end, 0x444444, view_projection_matrix);
+            self.draw_line_3d(start, end, 0x444444, view_projection_matrix, true);
         }
-    }    
+    }   
 
     pub fn draw_line_3d(
         &mut self,
@@ -91,15 +91,17 @@ impl Framebuffer {
         end: Vec3,
         color: u32,
         view_projection_matrix: &Mat4,
+        apply_gradient: bool,
     ) {
         let start_projected = *view_projection_matrix * Vec4::from((start, 1.0));
         let end_projected = *view_projection_matrix * Vec4::from((end, 1.0));
     
         if start_projected.w <= 0.0 && end_projected.w <= 0.0 {
-            return; 
+            return;
         }
     
-        let (start_projected, end_projected) = Self::clip_line_to_frustum(start_projected, end_projected);
+        let (start_projected, end_projected) =
+            Self::clip_line_to_frustum(start_projected, end_projected);
     
         let start_ndc = Vec3::new(
             start_projected.x / start_projected.w,
@@ -123,13 +125,59 @@ impl Framebuffer {
             (1.0 - (end_ndc.y * 0.5 + 0.5)) * self.height as f32,
         );
     
-        self.draw_line(screen_start, screen_end, color);
+        if apply_gradient {
+            self.draw_line_with_gradient(screen_start, screen_end, start, end, color);
+        } else {
+            self.draw_line(screen_start, screen_end, color);
+        }
     }
     
-    pub fn clip_line_to_frustum(
-        mut start: Vec4,
-        mut end: Vec4,
-    ) -> (Vec4, Vec4) {
+    pub fn draw_line_with_gradient(
+        &mut self,
+        start: Vec2,
+        end: Vec2,
+        start_world: Vec3,
+        end_world: Vec3,
+        color: u32,
+    ) {
+        let delta = end - start;
+        let delta_world = end_world - start_world;
+        let steps = delta.length().ceil() as usize;
+    
+        for i in 0..steps {
+            let t = i as f32 / steps as f32;
+    
+            let x = (start.x + t * delta.x).round() as usize;
+            let y = (start.y + t * delta.y).round() as usize;
+    
+            let current_world = start_world + t * delta_world;
+            let distance_to_origin = current_world.length();
+    
+            let gradient_factor = (distance_to_origin / 20.0).min(1.0); 
+
+            let adjusted_color = Self::interpolate_color(color, 0x333333, gradient_factor);
+    
+            self.set_pixel(x, y, adjusted_color);
+        }
+    }
+    
+    fn interpolate_color(color1: u32, color2: u32, factor: f32) -> u32 {
+        let r1 = (color1 >> 16) & 0xFF;
+        let g1 = (color1 >> 8) & 0xFF;
+        let b1 = color1 & 0xFF;
+    
+        let r2 = (color2 >> 16) & 0xFF;
+        let g2 = (color2 >> 8) & 0xFF;
+        let b2 = color2 & 0xFF;
+    
+        let r = ((1.0 - factor) * r1 as f32 + factor * r2 as f32) as u32;
+        let g = ((1.0 - factor) * g1 as f32 + factor * g2 as f32) as u32;
+        let b = ((1.0 - factor) * b1 as f32 + factor * b2 as f32) as u32;
+    
+        (r << 16) | (g << 8) | b
+    }
+    
+    pub fn clip_line_to_frustum(mut start: Vec4, mut end: Vec4) -> (Vec4, Vec4) {
         if start.w <= 0.0 {
             let t = (0.01 - start.w) / (end.w - start.w);
             start = start + t * (end - start);

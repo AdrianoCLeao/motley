@@ -232,11 +232,11 @@ Main function sets up the window, depth buffer, and the rendering pipeline. It l
 and continuously renders it to the screen while applying transformations for rotation.
 */
 fn main() {
-    let mut window: Window = Window::new("Motley Project", 1200, 800);
+    let mut window: Window = Window::new("Motley Project", 1200, 800, Some("assets/public/logo.ico"));
     let (fb_width, fb_height) = window.framebuffer_area();
     let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
-    let model = load_model("assets/teste.glb");
+    let model = load_model("assets/Avatar/scene.gltf");
 
     let camera = Arc::new(Mutex::new(Camera::new(
         Vec3::new(5.0, 0.0, 5.5),
@@ -263,7 +263,7 @@ fn main() {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
 
-        framebuffer.clear(0x141414);
+        framebuffer.clear(0x333333);
         depth_buffer.clear(u32::MAX);
 
         let cam = camera.lock().unwrap();
