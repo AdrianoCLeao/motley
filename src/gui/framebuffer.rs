@@ -45,34 +45,42 @@ impl Framebuffer {
 
     pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
         let axis_length = 50.0;
-
+    
+        // Eixo X (Vermelho)
         self.draw_line_3d(
-            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(-axis_length, 0.0, 0.0),
             Vec3::new(axis_length, 0.0, 0.0),
             0xFF0000,
             view_projection_matrix,
         );
-
+    
+        // Eixo Y (Azul)
         self.draw_line_3d(
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, axis_length, 0.0),
+            Vec3::new(0.0, 0.0, -axis_length),
+            Vec3::new(0.0, 0.0, axis_length),
             0x00FF00,
             view_projection_matrix,
         );
-
+    
         self.render_grid(view_projection_matrix, 10.0);
     }
 
     pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
-        for y in (-size as i32)..=(size as i32) {
-            let start = Vec3::new(-size, y as f32, 0.0);
-            let end = Vec3::new(size, y as f32, 0.0);
+        for x in (-size as i32)..=(size as i32) {
+            if x == 0 {
+                continue; 
+            }
+            let start = Vec3::new(x as f32, 0.0, -size);
+            let end = Vec3::new(x as f32, 0.0, size);
             self.draw_line_3d(start, end, 0x444444, view_projection_matrix);
         }
     
-        for x in (-size as i32)..=(size as i32) {
-            let start = Vec3::new(x as f32, -size, 0.0);
-            let end = Vec3::new(x as f32, size, 0.0);
+        for z in (-size as i32)..=(size as i32) {
+            if z == 0 {
+                continue; 
+            }
+            let start = Vec3::new(-size, 0.0, z as f32);
+            let end = Vec3::new(size, 0.0, z as f32);
             self.draw_line_3d(start, end, 0x444444, view_projection_matrix);
         }
     }    

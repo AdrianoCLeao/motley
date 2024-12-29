@@ -231,13 +231,12 @@ fn draw_model(
 Main function sets up the window, depth buffer, and the rendering pipeline. It loads a GLTF model
 and continuously renders it to the screen while applying transformations for rotation.
 */
-
 fn main() {
     let mut window: Window = Window::new("Motley Project", 1200, 800);
     let (fb_width, fb_height) = window.framebuffer_area();
     let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
-    let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
+    let model = load_model("assets/teste.glb");
 
     let camera = Arc::new(Mutex::new(Camera::new(
         Vec3::new(5.0, 0.0, 5.5),
