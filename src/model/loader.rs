@@ -1,5 +1,7 @@
+use std::path::Path;
+
+use crate::model::{load_texture, Texture};
 use glam::*;
-use crate::model::Texture;
 
 /*
 The `Vertex` struct represents a single vertex in a 3D mesh. It includes position and normal
@@ -10,7 +12,7 @@ a default vertex with zeroed position and normal.
 pub struct Vertex {
     pub position: Vec3,
     pub normal: Vec3,
-    pub tex_coord: Vec2
+    pub tex_coord: Vec2,
 }
 
 impl Default for Vertex {
@@ -18,7 +20,7 @@ impl Default for Vertex {
         Vertex {
             position: Vec3::ZERO,
             normal: Vec3::ZERO,
-            tex_coord: Vec2::ZERO
+            tex_coord: Vec2::ZERO,
         }
     }
 }
@@ -31,7 +33,7 @@ also stores a reference to the material index used for rendering the mesh.
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub material_idx: usize
+    pub material_idx: usize,
 }
 
 /*
@@ -41,14 +43,14 @@ The `Default` trait initializes it with a white color.
 #[derive(Clone, Debug)]
 pub struct Material {
     pub base_color: Vec4,
-    pub base_color_texture: Option<Texture>
+    pub base_color_texture: Option<Texture>,
 }
 
 impl Default for Material {
     fn default() -> Self {
         Material {
             base_color: Vec4::ONE,
-            base_color_texture: None
+            base_color_texture: None,
         }
     }
 }
@@ -60,7 +62,7 @@ a complete 3D object that can be rendered.
 #[derive(Clone, Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
-    pub materials: Vec<Material>
+    pub materials: Vec<Material>,
 }
 
 /*
@@ -87,7 +89,7 @@ fn process_node_recursive(
                     .read_positions()
                     .expect("Vertices precisam ter posições")
                     .map(Vec3::from)
-                    .map(|pos| transform.transform_point3(pos))
+                    .map(|pos| pos)
                     .collect::<Vec<_>>();
 
                 let mut vertices: Vec<Vertex> = positions
@@ -100,9 +102,8 @@ fn process_node_recursive(
 
                 if let Some(normals) = reader.read_normals() {
                     for (i, normal) in normals.enumerate() {
-                        vertices[i].normal = transform
-                            .transform_vector3(Vec3::from(normal))
-                            .normalize();
+                        vertices[i].normal =
+                            transform.transform_vector3(Vec3::from(normal)).normalize();
                     }
                 }
 
@@ -119,6 +120,25 @@ fn process_node_recursive(
 
                 let material_idx = primitive.material().index().unwrap_or(0);
 
+                let material = primitive.material().pbr_metallic_roughness();
+                materials[material_idx].base_color = Vec4::from(material.base_color_factor());
+
+                if let Some(base_color_texture) = material.base_color_texture() {
+                    if let gltf::image::Source::Uri { uri, .. } =
+                        base_color_texture.texture().source().source()
+                    {
+                        let model_path = Path::new(file_path);
+                        let texture_path = model_path
+                            .parent()
+                            .unwrap_or_else(|| Path::new("./"))
+                            .join(uri);
+
+                        let texture_path_str = texture_path.to_str().unwrap();
+                        materials[material_idx].base_color_texture =
+                            Some(load_texture(texture_path_str));
+                    }
+                }
+
                 meshes.push(Mesh {
                     vertices,
                     indices,
@@ -129,14 +149,7 @@ fn process_node_recursive(
     }
 
     for child in node.children() {
-        process_node_recursive(
-            &child,
-            buffers,
-            meshes,
-            materials,
-            file_path,
-            transform,
-        );
+        process_node_recursive(&child, buffers, meshes, materials, file_path, transform);
     }
 }
 

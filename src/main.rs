@@ -64,7 +64,7 @@ fn draw_triangle(
     let camera_dir = Vec3::new(0.0, 0.0, -1.0);
     let cos_angle = normal.dot(camera_dir);
 
-    if cos_angle < -0.9 {
+    if cos_angle < -1.0 {
         return;
     }
 
@@ -237,7 +237,7 @@ fn main() {
     let (fb_width, fb_height) = window.framebuffer_area();
     let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
-    let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
+    let model = load_model("assets/teste.glb");
 
     let camera = Arc::new(Mutex::new(Camera::new(
         Vec3::new(5.0, 0.0, 5.5),
