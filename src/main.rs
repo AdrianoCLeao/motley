@@ -49,7 +49,7 @@ fn edge_function(a: &Vec2, c: &Vec2, b: &Vec2) -> f32 {
 Renders a single triangle to the framebuffer. It performs perspective transformations, rasterization,
 depth testing, and normal correction to compute a color for each pixel in the triangle.
 */
-fn draw_triangle(
+pub fn draw_triangle(
     framebuffer: &mut Framebuffer,
     depth_buffer: &mut Framebuffer,
     v0: &Vertex,
