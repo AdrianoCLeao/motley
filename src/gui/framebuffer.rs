@@ -66,22 +66,22 @@ impl Framebuffer {
     }
     
     pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
-        for x in (-size as i32)..=(size as i32) {
-            if x == 0 {
-                continue;
-            }
-            let start = Vec3::new(x as f32, 0.0, -size);
-            let end = Vec3::new(x as f32, 0.0, size);
-            self.draw_line_3d(start, end, 0x444444, view_projection_matrix, true);
-        }
-    
-        for z in (-size as i32)..=(size as i32) {
-            if z == 0 {
-                continue;
-            }
-            let start = Vec3::new(-size, 0.0, z as f32);
-            let end = Vec3::new(size, 0.0, z as f32);
-            self.draw_line_3d(start, end, 0x444444, view_projection_matrix, true);
+        let start_end_pairs: Vec<(Vec3, Vec3)> = (-size as i32..=size as i32)
+            .filter(|&x| x != 0)
+            .flat_map(|x| {
+                let x_f32 = x as f32;
+                let start_x = Vec3::new(x_f32, 0.0, -size);
+                let end_x = Vec3::new(x_f32, 0.0, size);
+
+                let start_z = Vec3::new(-size, 0.0, x_f32);
+                let end_z = Vec3::new(size, 0.0, x_f32);
+
+                vec![(start_x, end_x), (start_z, end_z)]
+            })
+            .collect();
+
+        for (start, end) in start_end_pairs {
+            self.draw_line_3d(start, end, 0x505050, view_projection_matrix, true);
         }
     }   
 
@@ -207,24 +207,19 @@ impl Framebuffer {
         let offset_x = self.width - size - 10;
         let offset_y = self.height - size - 10;
         let center = Vec2::new(offset_x as f32 + size as f32 / 2.0, offset_y as f32 + size as f32 / 2.0);
-    
-        let axis_length = size as f32 / 2.0;
-    
-        let x_axis = Vec3::new(axis_length, 0.0, 0.0);
-        let y_axis = Vec3::new(0.0, -axis_length, 0.0);
-        let z_axis = Vec3::new(axis_length * 0.7, axis_length * 0.7, 0.0);
 
-        let rotated_x = camera_rotation.transform_point3(x_axis);
-        let rotated_y = camera_rotation.transform_point3(y_axis);
-        let rotated_z = camera_rotation.transform_point3(z_axis);
-    
-        let x_end = center + Vec2::new(rotated_x.x, -rotated_x.y);
-        let y_end = center + Vec2::new(rotated_y.x, -rotated_y.y);
-        let z_end = center + Vec2::new(rotated_z.x, -rotated_z.y);
-    
-        self.draw_line_2d(center, x_end, 0xFF0000);
-        self.draw_line_2d(center, y_end, 0x00FF00);
-        self.draw_line_2d(center, z_end, 0x0000FF);
+        let axis_length = size as f32 / 2.0;
+        let directions = [
+            (Vec3::new(axis_length, 0.0, 0.0), 0xFF0000),
+            (Vec3::new(0.0, -axis_length, 0.0), 0x00FF00),
+            (Vec3::new(axis_length * 0.7, axis_length * 0.7, 0.0), 0x0000FF),
+        ];
+
+        for (axis, color) in directions {
+            let rotated = camera_rotation.transform_point3(axis);
+            let end = center + Vec2::new(rotated.x, -rotated.y);
+            self.draw_line_2d(center, end, color);
+        }
     }
 
     pub fn draw_line_2d(&mut self, start: Vec2, end: Vec2, color: u32) {

@@ -1,5 +1,6 @@
 use glam::*;
 use gui::camera::Camera;
+use gui::optimization::frustum::Frustum;
 use std::sync::{Arc, Mutex};
 
 pub mod gui;
@@ -11,6 +12,7 @@ use model::{load_model, Material, Model, Vertex};
 
 mod handlers;
 use handlers::mouse_handler::MouseHandler;
+
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
@@ -47,7 +49,7 @@ fn edge_function(a: &Vec2, c: &Vec2, b: &Vec2) -> f32 {
 Renders a single triangle to the framebuffer. It performs perspective transformations, rasterization,
 depth testing, and normal correction to compute a color for each pixel in the triangle.
 */
-fn draw_triangle(
+pub fn draw_triangle(
     framebuffer: &mut Framebuffer,
     depth_buffer: &mut Framebuffer,
     v0: &Vertex,
@@ -56,16 +58,17 @@ fn draw_triangle(
     mvp: &Mat4,
     inv_trans_model_matrix: &Mat4,
     material: &Material,
+    camera_position: &Vec3, 
 ) {
     // --- Back-face Culling ---
     let normal = (v1.position - v0.position)
         .cross(v2.position - v0.position)
         .normalize();
-    let camera_dir = Vec3::new(0.0, 0.0, -1.0);
-    let cos_angle = normal.dot(camera_dir);
+    let view_dir = (v0.position - *camera_position).normalize();
+    let cos_angle = normal.dot(view_dir);
 
-    if cos_angle < -1.0 {
-        return;
+    if cos_angle >= 0.0 {
+        return; 
     }
 
     let v0_clip_space = project(&v0.position, mvp);
@@ -80,7 +83,7 @@ fn draw_triangle(
     let area_rep = 1.0 / edge_function(&v0_screen, &v1_screen, &v2_screen);
 
     // --- Tile-based Rasterization ---
-    let tile_size = 4;
+    let tile_size = 32;
     let min = v0_screen.min(v1_screen.min(v2_screen)).max(Vec2::ZERO);
     let max = (v0_screen.max(v1_screen.max(v2_screen)) + 1.0).min(screen_size);
 
@@ -204,8 +207,18 @@ fn draw_model(
     model: &Model,
     mvp: &Mat4,
     inv_trans_model_matrix: &Mat4,
+    camera_position: &Vec3,
 ) {
+    let frustum = Frustum::from_view_projection_matrix(mvp);
+
     for mesh in &model.meshes {
+        let min = mesh.vertices.iter().map(|v| v.position).fold(Vec3::splat(f32::MAX), Vec3::min);
+        let max = mesh.vertices.iter().map(|v| v.position).fold(Vec3::splat(f32::MIN), Vec3::max);
+
+        if !frustum.is_box_in_frustum(min, max) {
+            continue; 
+        }
+
         for i in 0..(mesh.indices.len() / 3) {
             let v0 = mesh.vertices[mesh.indices[i * 3] as usize];
             let v1 = mesh.vertices[mesh.indices[i * 3 + 1] as usize];
@@ -222,6 +235,7 @@ fn draw_model(
                 mvp,
                 inv_trans_model_matrix,
                 material,
+                camera_position,
             );
         }
     }
@@ -282,6 +296,7 @@ fn main() {
             &model,
             &view_projection_matrix,
             &inv_trans_model_matrix,
+            &cam.position
         );
 
         window.render_bottom_bar();
