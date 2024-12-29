@@ -16,7 +16,6 @@ pub fn setup_menu(window: &mut Window, camera: Arc<Mutex<Camera>>) {
             let mut cam = camera.lock().unwrap();
             cam.set_position(Vec3::new(0.0, 0.0, 5.5));
             cam.set_target(Vec3::ZERO);
-            cam.set_up(Vec3::Y);
         });
     }
 

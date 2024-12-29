@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use glam::{Vec2, Vec3};
+use glam::Vec2;
 use crate::camera::Camera;
 use crate::gui::Window;
 
@@ -20,7 +20,6 @@ impl MouseHandler {
         camera: Arc<Mutex<Camera>>,
     ) {
         if let Some(mouse_pos) = window.get_mouse_pos() {
-            let mouse_left_down = window.is_mouse_down(minifb::MouseButton::Left);
             let mouse_middle_down = window.is_mouse_down(minifb::MouseButton::Middle);
             let shift_pressed = window.is_key_down(minifb::Key::LeftShift) || window.is_key_down(minifb::Key::RightShift);
             let scroll_delta = window.get_scroll_wheel();
@@ -32,21 +31,23 @@ impl MouseHandler {
                 if mouse_middle_down {
                     let mut cam = camera.lock().unwrap();
                     if shift_pressed {
-
-                        let pan_speed = 0.01;
-                        let right = cam.right();
-                        let up = cam.up();
-                        cam.pan(-delta.x * pan_speed, delta.y * pan_speed, right, up);
+                        let pan_speed = 0.3;
+                        cam.pan(-delta.x * pan_speed, delta.y * pan_speed);
                     } else {
-                        let rotation_speed = 0.01;
-                        cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed);
+                        let rotation_speed = 0.3;
+                        let delta_z = if window.is_key_down(minifb::Key::LeftAlt) {
+                            Some(delta.x)
+                        } else {
+                            None
+                        };
+                        cam.orbit(delta.x * rotation_speed, delta.y * rotation_speed, delta_z);
                     }
                 }
             }
 
             if scroll_delta != 0.0 {
                 let mut cam = camera.lock().unwrap();
-                cam.zoom(-scroll_delta * 0.1); 
+                cam.zoom(-scroll_delta * 0.1);
             }
 
             *last_mouse_pos = Some(mouse_pos);

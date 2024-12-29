@@ -1,3 +1,5 @@
+use minifb::{ScaleMode, Scale};
+
 use crate::gui::{framebuffer::Framebuffer, menu::Menu};
 
 pub struct Window {
@@ -15,6 +17,8 @@ impl Window {
     pub fn new(name: &str, width: usize, height: usize) -> Self {
         let options = minifb::WindowOptions {
             resize: true,
+            scale: Scale::FitScreen,
+            scale_mode: ScaleMode::Center,
             ..Default::default()
         };
 
