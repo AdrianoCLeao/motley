@@ -1,4 +1,9 @@
-use minifb::{ScaleMode, Scale};
+use minifb::{ScaleMode, Scale, WindowOptions};
+use winapi::shared::windef::HWND;
+use winapi::um::winuser::{LoadImageW, SendMessageW, ICON_BIG, ICON_SMALL, WM_SETICON, IMAGE_ICON, LR_LOADFROMFILE};
+use std::ptr;
+use std::ffi::OsStr;
+use std::os::windows::ffi::OsStrExt;
 
 use crate::gui::{framebuffer::Framebuffer, menu::Menu};
 
@@ -14,8 +19,8 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(name: &str, width: usize, height: usize) -> Self {
-        let options = minifb::WindowOptions {
+    pub fn new(name: &str, width: usize, height: usize, icon_path: Option<&str>) -> Self {
+        let options = WindowOptions {
             resize: true,
             scale: Scale::FitScreen,
             scale_mode: ScaleMode::Center,
@@ -28,7 +33,11 @@ impl Window {
         let window = minifb::Window::new(name, total_width, total_height, options)
             .expect("Failed to create window.");
 
-        let framebuffer = Framebuffer::new(width - 200, height - 50);
+        if let Some(path) = icon_path {
+            Self::set_window_icon(&window, path);
+        }
+
+        let framebuffer = Framebuffer::new(width - 200, height);
         let menu = Menu::new();
 
         Window {
@@ -36,10 +45,47 @@ impl Window {
             framebuffer,
             menu,
             sidebar_width: 200,
-            bottom_bar_height: 50,
+            bottom_bar_height: 0,
             rotation: glam::Vec2::ZERO,
             pan_offset: glam::Vec2::ZERO,
             zoom: 2.5,
+        }
+    }
+
+    fn set_window_icon(window: &minifb::Window, icon_path: &str) {
+        unsafe {
+            let hwnd = window.get_window_handle() as HWND;
+
+            let icon_path_wide: Vec<u16> = OsStr::new(icon_path)
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+
+            let hicon_big = LoadImageW(
+                ptr::null_mut(),
+                icon_path_wide.as_ptr(),
+                IMAGE_ICON,
+                64,
+                64,
+                LR_LOADFROMFILE,
+            );
+
+            let hicon_small = LoadImageW(
+                ptr::null_mut(),
+                icon_path_wide.as_ptr(),
+                IMAGE_ICON,
+                16,
+                16,
+                LR_LOADFROMFILE,
+            );
+
+            if !hicon_big.is_null() {
+                SendMessageW(hwnd, WM_SETICON, ICON_BIG as usize, hicon_big as isize);
+            }
+
+            if !hicon_small.is_null() {
+                SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, hicon_small as isize);
+            }
         }
     }
 
@@ -68,15 +114,15 @@ impl Window {
     }
 
     pub fn set_rotation(&mut self, delta: glam::Vec2) {
-        self.rotation += delta * 0.01; // Ajuste de sensibilidade
+        self.rotation += delta * 0.01; 
     }
 
     pub fn set_pan_offset(&mut self, delta: glam::Vec2) {
-        self.pan_offset += delta * 0.01; // Ajuste de sensibilidade
+        self.pan_offset += delta * 0.01;
     }
 
     pub fn set_zoom(&mut self, delta: f32) {
-        self.zoom = (self.zoom - delta * 0.1).clamp(1.0, 10.0); // Limita o zoom entre 1.0 e 10.0
+        self.zoom = (self.zoom - delta * 0.1).clamp(1.0, 10.0); 
     }
 
     pub fn render_bottom_bar(&mut self) {
@@ -122,19 +168,19 @@ impl Window {
     
         for y in 0..self.framebuffer.height() {
             for x in 0..self.sidebar_width {
-                full_data[x + y * total_width] = 0x555555; 
+                full_data[x + y * total_width] = 0x141414; 
             }
         }
     
-        for y in self.framebuffer.height()..total_height {
+        /* for y in self.framebuffer.height()..total_height {
             for x in self.sidebar_width..total_width {
-                full_data[x + y * total_width] = 0x222222;
+                full_data[x + y * total_width] = 0x141414;
             }
-        }
+        } */
     
         for y in self.framebuffer.height()..total_height {
             for x in 0..self.sidebar_width {
-                full_data[x + y * total_width] = 0x222222;
+                full_data[x + y * total_width] = 0x141414;
             }
         }
 

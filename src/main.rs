@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 pub mod gui;
 use gui::components::setup_menu;
-use gui::{Framebuffer, Window, camera};
+use gui::{Framebuffer, Window};
 
 pub mod model;
 use model::{load_model, Material, Model, Vertex};
@@ -64,7 +64,7 @@ fn draw_triangle(
     let camera_dir = Vec3::new(0.0, 0.0, -1.0);
     let cos_angle = normal.dot(camera_dir);
 
-    if cos_angle < -0.9 {
+    if cos_angle < -1.0 {
         return;
     }
 
@@ -231,13 +231,12 @@ fn draw_model(
 Main function sets up the window, depth buffer, and the rendering pipeline. It loads a GLTF model
 and continuously renders it to the screen while applying transformations for rotation.
 */
-
 fn main() {
-    let mut window: Window = Window::new("Motley Project", 1200, 800);
+    let mut window: Window = Window::new("Motley Project", 1200, 800, Some("assets/public/logo.ico"));
     let (fb_width, fb_height) = window.framebuffer_area();
     let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
-    let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
+    let model = load_model("assets/Avatar/scene.gltf");
 
     let camera = Arc::new(Mutex::new(Camera::new(
         Vec3::new(5.0, 0.0, 5.5),
@@ -264,7 +263,7 @@ fn main() {
             depth_buffer = Framebuffer::new(framebuffer.width(), framebuffer.height());
         }
 
-        framebuffer.clear(0x141414);
+        framebuffer.clear(0x333333);
         depth_buffer.clear(u32::MAX);
 
         let cam = camera.lock().unwrap();

@@ -25,7 +25,7 @@ impl Camera {
         };
 
         camera.set_rotation_from_degrees(70.0, 180.0);
-        camera.position = Vec3::new(0.0, -11.0, 4.5);
+        camera.position = Vec3::new(-0.5, 2.0, 4.5);
 
         camera
     }
