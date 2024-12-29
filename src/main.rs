@@ -56,16 +56,17 @@ fn draw_triangle(
     mvp: &Mat4,
     inv_trans_model_matrix: &Mat4,
     material: &Material,
+    camera_position: &Vec3, 
 ) {
     // --- Back-face Culling ---
     let normal = (v1.position - v0.position)
         .cross(v2.position - v0.position)
         .normalize();
-    let camera_dir = Vec3::new(0.0, 0.0, -1.0);
-    let cos_angle = normal.dot(camera_dir);
+    let view_dir = (v0.position - *camera_position).normalize();
+    let cos_angle = normal.dot(view_dir);
 
-    if cos_angle < -1.0 {
-        return;
+    if cos_angle >= 0.0 {
+        return; 
     }
 
     let v0_clip_space = project(&v0.position, mvp);
@@ -204,6 +205,7 @@ fn draw_model(
     model: &Model,
     mvp: &Mat4,
     inv_trans_model_matrix: &Mat4,
+    camera_position: &Vec3,
 ) {
     for mesh in &model.meshes {
         for i in 0..(mesh.indices.len() / 3) {
@@ -222,6 +224,7 @@ fn draw_model(
                 mvp,
                 inv_trans_model_matrix,
                 material,
+                camera_position,
             );
         }
     }
@@ -282,6 +285,7 @@ fn main() {
             &model,
             &view_projection_matrix,
             &inv_trans_model_matrix,
+            &cam.position
         );
 
         window.render_bottom_bar();
