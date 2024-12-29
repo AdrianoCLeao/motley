@@ -94,33 +94,53 @@ impl Framebuffer {
     ) {
         let start_projected = *view_projection_matrix * Vec4::from((start, 1.0));
         let end_projected = *view_projection_matrix * Vec4::from((end, 1.0));
-
-        if start_projected.w <= 0.0 || end_projected.w <= 0.0 {
-            return;
+    
+        if start_projected.w <= 0.0 && end_projected.w <= 0.0 {
+            return; 
         }
-
+    
+        let (start_projected, end_projected) = Self::clip_line_to_frustum(start_projected, end_projected);
+    
         let start_ndc = Vec3::new(
             start_projected.x / start_projected.w,
             start_projected.y / start_projected.w,
             start_projected.z / start_projected.w,
         );
-
+    
         let end_ndc = Vec3::new(
             end_projected.x / end_projected.w,
             end_projected.y / end_projected.w,
             end_projected.z / end_projected.w,
         );
-
+    
         let screen_start = Vec2::new(
             (start_ndc.x * 0.5 + 0.5) * self.width as f32,
             (1.0 - (start_ndc.y * 0.5 + 0.5)) * self.height as f32,
         );
+    
         let screen_end = Vec2::new(
             (end_ndc.x * 0.5 + 0.5) * self.width as f32,
             (1.0 - (end_ndc.y * 0.5 + 0.5)) * self.height as f32,
         );
-
+    
         self.draw_line(screen_start, screen_end, color);
+    }
+    
+    pub fn clip_line_to_frustum(
+        mut start: Vec4,
+        mut end: Vec4,
+    ) -> (Vec4, Vec4) {
+        if start.w <= 0.0 {
+            let t = (0.01 - start.w) / (end.w - start.w);
+            start = start + t * (end - start);
+        }
+    
+        if end.w <= 0.0 {
+            let t = (0.01 - end.w) / (start.w - end.w);
+            end = end + t * (start - end);
+        }
+    
+        (start, end)
     }
 
     pub fn draw_line(&mut self, start: Vec2, end: Vec2, color: u32) {
