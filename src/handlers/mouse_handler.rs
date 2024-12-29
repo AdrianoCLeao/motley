@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use glam::Vec2;
-use crate::camera::Camera;
+use crate::gui::camera::Camera;
 use crate::gui::Window;
 
 pub struct MouseHandler {
