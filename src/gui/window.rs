@@ -48,7 +48,7 @@ impl Window {
             bottom_bar_height: 0,
             rotation: glam::Vec2::ZERO,
             pan_offset: glam::Vec2::ZERO,
-            zoom: 2.5,
+            zoom: 2.5,                   
         }
     }
 
@@ -161,6 +161,7 @@ impl Window {
     }
 
     pub fn display(&mut self) {
+
         let total_width = self.framebuffer.width() + self.sidebar_width;
         let total_height = self.framebuffer.height() + self.bottom_bar_height;
     

@@ -1,5 +1,6 @@
 use glam::*;
 use gui::camera::Camera;
+use gui::optimization::frustum::Frustum;
 use std::sync::{Arc, Mutex};
 
 pub mod gui;
@@ -11,6 +12,7 @@ use model::{load_model, Material, Model, Vertex};
 
 mod handlers;
 use handlers::mouse_handler::MouseHandler;
+
 
 /*
 This program implements a basic 3D renderer using a software rasterizer. It includes functionalities
@@ -81,7 +83,7 @@ fn draw_triangle(
     let area_rep = 1.0 / edge_function(&v0_screen, &v1_screen, &v2_screen);
 
     // --- Tile-based Rasterization ---
-    let tile_size = 4;
+    let tile_size = 32;
     let min = v0_screen.min(v1_screen.min(v2_screen)).max(Vec2::ZERO);
     let max = (v0_screen.max(v1_screen.max(v2_screen)) + 1.0).min(screen_size);
 
@@ -207,7 +209,16 @@ fn draw_model(
     inv_trans_model_matrix: &Mat4,
     camera_position: &Vec3,
 ) {
+    let frustum = Frustum::from_view_projection_matrix(mvp);
+
     for mesh in &model.meshes {
+        let min = mesh.vertices.iter().map(|v| v.position).fold(Vec3::splat(f32::MAX), Vec3::min);
+        let max = mesh.vertices.iter().map(|v| v.position).fold(Vec3::splat(f32::MIN), Vec3::max);
+
+        if !frustum.is_box_in_frustum(min, max) {
+            continue; 
+        }
+
         for i in 0..(mesh.indices.len() / 3) {
             let v0 = mesh.vertices[mesh.indices[i * 3] as usize];
             let v1 = mesh.vertices[mesh.indices[i * 3 + 1] as usize];

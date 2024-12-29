@@ -46,23 +46,23 @@ impl Framebuffer {
     pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
         let axis_length = 15.0;
     
-        self.draw_line_3d(
+        /* self.draw_line_3d(
             Vec3::new(-axis_length, 0.0, 0.0),
             Vec3::new(axis_length, 0.0, 0.0),
             0xA63737,
             view_projection_matrix,
             false, 
-        );
+        ); */
     
-        self.draw_line_3d(
+        /* self.draw_line_3d(
             Vec3::new(0.0, 0.0, -axis_length),
             Vec3::new(0.0, 0.0, axis_length),
             0x468E2C,
             view_projection_matrix,
             false, 
-        );
+        ); */
     
-        self.render_grid(view_projection_matrix, 15.0);
+        //self.render_grid(view_projection_matrix, 15.0);
     }
     
     pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
