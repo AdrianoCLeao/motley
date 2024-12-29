@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 pub mod gui;
 use gui::components::setup_menu;
-use gui::{Framebuffer, Window, camera};
+use gui::{Framebuffer, Window};
 
 pub mod model;
 use model::{load_model, Material, Model, Vertex};
