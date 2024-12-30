@@ -60,6 +60,7 @@ pub fn draw_triangle(
     material: &Material,
     camera_position: &Vec3, 
 ) {
+
     // --- Back-face Culling ---
     let normal = (v1.position - v0.position)
         .cross(v2.position - v0.position)
@@ -80,10 +81,15 @@ pub fn draw_triangle(
     let v1_screen = clip_to_screen_space(&v1_clip_space.0.xy(), &screen_size);
     let v2_screen = clip_to_screen_space(&v2_clip_space.0.xy(), &screen_size);
 
-    let area_rep = 1.0 / edge_function(&v0_screen, &v1_screen, &v2_screen);
+    let screen_area = edge_function(&v0_screen, &v1_screen, &v2_screen).abs();
+    if screen_area < 0.5 {
+        return; 
+    }
+
+    let area_rep = 1.0 / screen_area;
 
     // --- Tile-based Rasterization ---
-    let tile_size = 32;
+    let tile_size = 4;
     let min = v0_screen.min(v1_screen.min(v2_screen)).max(Vec2::ZERO);
     let max = (v0_screen.max(v1_screen.max(v2_screen)) + 1.0).min(screen_size);
 
@@ -283,6 +289,9 @@ fn main() {
         let cam = camera.lock().unwrap();
         let view_projection_matrix = cam.view_projection_matrix();
         framebuffer.render_3d_axes(&view_projection_matrix);
+
+        //let zoom_factor = view_projection_matrix.x_axis.length();
+        //framebuffer.render_grid(&view_projection_matrix, 15.0, zoom_factor);
 
         let rotation_matrix = cam.view_matrix().inverse();
         framebuffer.render_compass(&rotation_matrix, 50);

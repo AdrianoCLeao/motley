@@ -1,4 +1,7 @@
+use std::sync::Mutex;
+
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use rayon::prelude::*;
 
 pub struct Framebuffer {
     pub data: Vec<u32>,
@@ -44,54 +47,138 @@ impl Framebuffer {
     }
 
     pub fn render_3d_axes(&mut self, view_projection_matrix: &Mat4) {
+        let screen_bounds = Vec2::new(self.width as f32, self.height as f32);
         let axis_length = 15.0;
     
-        self.draw_line_3d(
+        self.draw_line_3d_clipped(
             Vec3::new(-axis_length, 0.0, 0.0),
             Vec3::new(axis_length, 0.0, 0.0),
             0xA63737,
             view_projection_matrix,
-            false, 
+            screen_bounds,
         );
     
-        self.draw_line_3d(
+        self.draw_line_3d_clipped(
             Vec3::new(0.0, 0.0, -axis_length),
             Vec3::new(0.0, 0.0, axis_length),
             0x468E2C,
             view_projection_matrix,
-            false, 
+            screen_bounds,
         );
-    
-        self.render_grid(view_projection_matrix, 15.0);
     }
     
-    pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
-        let start_end_pairs: Vec<(Vec3, Vec3)> = (-size as i32..=size as i32)
+    pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32, zoom_factor: f32) {
+        let screen_bounds = Vec2::new(self.width as f32, self.height as f32);
+    
+        let grid_spacing = if zoom_factor > 10.0 {
+            5.0
+        } else if zoom_factor > 5.0 {
+            2.0
+        } else {
+            1.0
+        };
+    
+        let lines: Vec<(Vec3, Vec3, u32)> = (-size as i32..=size as i32)
+            .step_by(grid_spacing as usize)
             .filter(|&x| x != 0)
             .flat_map(|x| {
-                let x_f32 = x as f32;
+                let x_f32 = x as f32 * grid_spacing;
+    
                 let start_x = Vec3::new(x_f32, 0.0, -size);
                 let end_x = Vec3::new(x_f32, 0.0, size);
-
+    
                 let start_z = Vec3::new(-size, 0.0, x_f32);
                 let end_z = Vec3::new(size, 0.0, x_f32);
-
-                vec![(start_x, end_x), (start_z, end_z)]
+    
+                vec![
+                    (start_x, end_x, 0x505050),
+                    (start_z, end_z, 0x505050),
+                ]
             })
             .collect();
-
-        for (start, end) in start_end_pairs {
-            self.draw_line_3d(start, end, 0x505050, view_projection_matrix, true);
+    
+        let tile_size = 4098;
+        let tiles_x = (self.width + tile_size - 1) / tile_size;
+        let tiles_y = (self.height + tile_size - 1) / tile_size;
+    
+        let tile_results = Mutex::new(vec![vec![]; tiles_x * tiles_y]);
+    
+        (0..tiles_y).into_par_iter().for_each(|tile_y| {
+            (0..tiles_x).for_each(|tile_x| {
+                let tile_min = Vec2::new(
+                    (tile_x * tile_size) as f32,
+                    (tile_y * tile_size) as f32,
+                );
+                let tile_max = Vec2::new(
+                    ((tile_x + 1) * tile_size) as f32,
+                    ((tile_y + 1) * tile_size) as f32,
+                );
+    
+                let tile_lines: Vec<(Vec2, Vec2, u32)> = lines
+                    .iter()
+                    .filter_map(|(start, end, color)| {
+                        let start_projected = *view_projection_matrix * Vec4::from((*start, 1.0));
+                        let end_projected = *view_projection_matrix * Vec4::from((*end, 1.0));
+    
+                        if start_projected.w <= 0.0 && end_projected.w <= 0.0 {
+                            return None;
+                        }
+    
+                        let (start_projected, end_projected) =
+                            Self::clip_line_to_frustum(start_projected, end_projected);
+    
+                        let start_ndc = Vec3::new(
+                            start_projected.x / start_projected.w,
+                            start_projected.y / start_projected.w,
+                            start_projected.z / start_projected.w,
+                        );
+    
+                        let end_ndc = Vec3::new(
+                            end_projected.x / end_projected.w,
+                            end_projected.y / end_projected.w,
+                            end_projected.z / end_projected.w,
+                        );
+    
+                        let screen_start = Vec2::new(
+                            (start_ndc.x * 0.5 + 0.5) * screen_bounds.x,
+                            (1.0 - (start_ndc.y * 0.5 + 0.5)) * screen_bounds.y,
+                        );
+    
+                        let screen_end = Vec2::new(
+                            (end_ndc.x * 0.5 + 0.5) * screen_bounds.x,
+                            (1.0 - (end_ndc.y * 0.5 + 0.5)) * screen_bounds.y,
+                        );
+    
+                        if screen_start.x > tile_max.x || screen_end.x < tile_min.x
+                            || screen_start.y > tile_max.y || screen_end.y < tile_min.y
+                        {
+                            return None;
+                        }
+    
+                        Some((screen_start, screen_end, *color))
+                    })
+                    .collect();
+    
+                let tile_index = tile_y * tiles_x + tile_x;
+    
+                tile_results.lock().unwrap()[tile_index] = tile_lines;
+            });
+        });
+    
+        for tile_lines in tile_results.into_inner().unwrap() {
+            for (start, end, color) in tile_lines {
+                self.draw_line(start, end, color);
+            }
         }
-    }   
+    }  
 
-    pub fn draw_line_3d(
+    pub fn draw_line_3d_clipped(
         &mut self,
         start: Vec3,
         end: Vec3,
         color: u32,
         view_projection_matrix: &Mat4,
-        apply_gradient: bool,
+        screen_bounds: Vec2,
     ) {
         let start_projected = *view_projection_matrix * Vec4::from((start, 1.0));
         let end_projected = *view_projection_matrix * Vec4::from((end, 1.0));
@@ -116,20 +203,23 @@ impl Framebuffer {
         );
     
         let screen_start = Vec2::new(
-            (start_ndc.x * 0.5 + 0.5) * self.width as f32,
-            (1.0 - (start_ndc.y * 0.5 + 0.5)) * self.height as f32,
+            (start_ndc.x * 0.5 + 0.5) * screen_bounds.x,
+            (1.0 - (start_ndc.y * 0.5 + 0.5)) * screen_bounds.y,
         );
     
         let screen_end = Vec2::new(
-            (end_ndc.x * 0.5 + 0.5) * self.width as f32,
-            (1.0 - (end_ndc.y * 0.5 + 0.5)) * self.height as f32,
+            (end_ndc.x * 0.5 + 0.5) * screen_bounds.x,
+            (1.0 - (end_ndc.y * 0.5 + 0.5)) * screen_bounds.y,
         );
     
-        if apply_gradient {
-            self.draw_line_with_gradient(screen_start, screen_end, start, end, color);
-        } else {
-            self.draw_line(screen_start, screen_end, color);
+        if screen_start.x < 0.0 && screen_end.x < 0.0 || screen_start.x > screen_bounds.x && screen_end.x > screen_bounds.x {
+            return;
         }
+        if screen_start.y < 0.0 && screen_end.y < 0.0 || screen_start.y > screen_bounds.y && screen_end.y > screen_bounds.y {
+            return;
+        }
+    
+        self.draw_line(screen_start, screen_end, color);
     }
     
     pub fn draw_line_with_gradient(
