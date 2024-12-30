@@ -63,17 +63,25 @@ impl Framebuffer {
             view_projection_matrix,
             screen_bounds,
         );
-    
-        self.render_grid(view_projection_matrix, 15.0);
     }
     
-    pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32) {
+    pub fn render_grid(&mut self, view_projection_matrix: &Mat4, size: f32, zoom_factor: f32) {
         let screen_bounds = Vec2::new(self.width as f32, self.height as f32);
-    
+
+        let grid_spacing = if zoom_factor > 10.0 {
+            5.0
+        } else if zoom_factor > 5.0 {
+            2.0
+        } else {
+            1.0
+        };
+
         let lines: Vec<(Vec3, Vec3, u32)> = (-size as i32..=size as i32)
+            .step_by(grid_spacing as usize)
             .filter(|&x| x != 0)
             .flat_map(|x| {
-                let x_f32 = x as f32;
+                let x_f32 = x as f32 * grid_spacing;
+    
                 let start_x = Vec3::new(x_f32, 0.0, -size);
                 let end_x = Vec3::new(x_f32, 0.0, size);
     
@@ -121,6 +129,13 @@ impl Framebuffer {
                     (end_ndc.x * 0.5 + 0.5) * screen_bounds.x,
                     (1.0 - (end_ndc.y * 0.5 + 0.5)) * screen_bounds.y,
                 );
+
+                if screen_start.x < 0.0 && screen_end.x < 0.0 || screen_start.x > screen_bounds.x && screen_end.x > screen_bounds.x {
+                    return None;
+                }
+                if screen_start.y < 0.0 && screen_end.y < 0.0 || screen_start.y > screen_bounds.y && screen_end.y > screen_bounds.y {
+                    return None;
+                }
     
                 Some((screen_start, screen_end, color))
             })
