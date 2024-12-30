@@ -911,6 +911,7 @@ dependencies = [
  "gltf",
  "image",
  "minifb",
+ "rayon",
  "serde",
  "serde_json",
  "stb_image",
