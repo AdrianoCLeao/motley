@@ -914,7 +914,6 @@ dependencies = [
  "serde",
  "serde_json",
  "stb_image",
- "winapi",
 ]
 
 [[package]]

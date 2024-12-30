@@ -1,10 +1,4 @@
 use minifb::{ScaleMode, Scale, WindowOptions};
-use winapi::shared::windef::HWND;
-use winapi::um::winuser::{LoadImageW, SendMessageW, ICON_BIG, ICON_SMALL, WM_SETICON, IMAGE_ICON, LR_LOADFROMFILE};
-use std::ptr;
-use std::ffi::OsStr;
-use std::os::windows::ffi::OsStrExt;
-
 use crate::gui::{framebuffer::Framebuffer, menu::Menu};
 
 pub struct Window {
@@ -19,7 +13,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(name: &str, width: usize, height: usize, icon_path: Option<&str>) -> Self {
+    pub fn new(name: &str, width: usize, height: usize) -> Self {
         let options = WindowOptions {
             resize: true,
             scale: Scale::FitScreen,
@@ -33,10 +27,6 @@ impl Window {
         let window = minifb::Window::new(name, total_width, total_height, options)
             .expect("Failed to create window.");
 
-        if let Some(path) = icon_path {
-            Self::set_window_icon(&window, path);
-        }
-
         let framebuffer = Framebuffer::new(width - 200, height);
         let menu = Menu::new();
 
@@ -49,43 +39,6 @@ impl Window {
             rotation: glam::Vec2::ZERO,
             pan_offset: glam::Vec2::ZERO,
             zoom: 2.5,                   
-        }
-    }
-
-    fn set_window_icon(window: &minifb::Window, icon_path: &str) {
-        unsafe {
-            let hwnd = window.get_window_handle() as HWND;
-
-            let icon_path_wide: Vec<u16> = OsStr::new(icon_path)
-                .encode_wide()
-                .chain(Some(0))
-                .collect();
-
-            let hicon_big = LoadImageW(
-                ptr::null_mut(),
-                icon_path_wide.as_ptr(),
-                IMAGE_ICON,
-                64,
-                64,
-                LR_LOADFROMFILE,
-            );
-
-            let hicon_small = LoadImageW(
-                ptr::null_mut(),
-                icon_path_wide.as_ptr(),
-                IMAGE_ICON,
-                16,
-                16,
-                LR_LOADFROMFILE,
-            );
-
-            if !hicon_big.is_null() {
-                SendMessageW(hwnd, WM_SETICON, ICON_BIG as usize, hicon_big as isize);
-            }
-
-            if !hicon_small.is_null() {
-                SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, hicon_small as isize);
-            }
         }
     }
 
