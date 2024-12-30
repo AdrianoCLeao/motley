@@ -288,9 +288,10 @@ fn main() {
 
         let cam = camera.lock().unwrap();
         let view_projection_matrix = cam.view_projection_matrix();
-        let zoom_factor = view_projection_matrix.x_axis.length();
         framebuffer.render_3d_axes(&view_projection_matrix);
-        framebuffer.render_grid(&view_projection_matrix, 15.0, zoom_factor);
+
+        //let zoom_factor = view_projection_matrix.x_axis.length();
+        //framebuffer.render_grid(&view_projection_matrix, 15.0, zoom_factor);
 
         let rotation_matrix = cam.view_matrix().inverse();
         framebuffer.render_compass(&rotation_matrix, 50);
