@@ -256,7 +256,7 @@ fn main() {
     let (fb_width, fb_height) = window.framebuffer_area();
     let mut depth_buffer = Framebuffer::new(fb_width, fb_height);
 
-    let model = load_model("assets/Avatar/scene.gltf");
+    let model = load_model("assets/DamagedHelmet/DamagedHelmet.gltf");
 
     let camera = Arc::new(Mutex::new(Camera::new(
         Vec3::new(5.0, 0.0, 5.5),
