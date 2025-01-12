@@ -7,9 +7,6 @@ pub struct Window {
     menu: Menu,
     sidebar_width: usize,
     bottom_bar_height: usize,
-    rotation: glam::Vec2,
-    pan_offset: glam::Vec2,
-    zoom: f32,
 }
 
 impl Window {
@@ -33,10 +30,7 @@ impl Window {
             framebuffer,
             menu,
             sidebar_width: 200,
-            bottom_bar_height: 0,
-            rotation: glam::Vec2::ZERO,
-            pan_offset: glam::Vec2::ZERO,
-            zoom: 2.5,                   
+            bottom_bar_height: 0,                 
         }
     }
 
@@ -50,30 +44,6 @@ impl Window {
 
     pub fn bottom_bar_height(&self) -> usize {
         self.bottom_bar_height
-    }
-
-    pub fn get_rotation(&self) -> glam::Vec2 {
-        self.rotation
-    }
-
-    pub fn get_pan_offset(&self) -> glam::Vec2 {
-        self.pan_offset
-    }
-
-    pub fn get_zoom(&self) -> f32 {
-        self.zoom
-    }
-
-    pub fn set_rotation(&mut self, delta: glam::Vec2) {
-        self.rotation += delta * 0.01; 
-    }
-
-    pub fn set_pan_offset(&mut self, delta: glam::Vec2) {
-        self.pan_offset += delta * 0.01;
-    }
-
-    pub fn set_zoom(&mut self, delta: f32) {
-        self.zoom = (self.zoom - delta * 0.1).clamp(1.0, 10.0); 
     }
 
     pub fn render_bottom_bar(&mut self) {
@@ -103,10 +73,6 @@ impl Window {
         }
     }
 
-    pub fn render_menu(&mut self) {
-        self.menu.render(&mut self.framebuffer);
-    }
-
     pub fn should_close(&self) -> bool {
         !self.window.is_open()
     }
@@ -124,6 +90,7 @@ impl Window {
             }
         }
     
+        // Renders the bottom bar, as it is unused i commented it
         /* for y in self.framebuffer.height()..total_height {
             for x in self.sidebar_width..total_width {
                 full_data[x + y * total_width] = 0x141414;
@@ -144,7 +111,14 @@ impl Window {
             }
         }
 
-        self.menu.render_in_sidebar(&mut full_data, self.sidebar_width, total_width, total_height);
+        let font_data = include_bytes!("../../fonts/Times-New-Roman/times-new-roman.ttf");
+        self.menu.render_in_sidebar(&mut full_data, self.sidebar_width, total_width, total_height, font_data);
+
+        if let Some((mouse_x, mouse_y)) = self.get_mouse_pos() {
+            if self.is_mouse_down(minifb::MouseButton::Left) {
+                self.process_menu_click(mouse_x, mouse_y);
+            }
+        }
     
         self.window
             .update_with_buffer(&full_data, total_width, total_height)
