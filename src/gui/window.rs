@@ -144,7 +144,8 @@ impl Window {
             }
         }
 
-        self.menu.render_in_sidebar(&mut full_data, self.sidebar_width, total_width, total_height);
+        let font_data = include_bytes!("../../fonts/arial.ttf");
+        self.menu.render_in_sidebar(&mut full_data, self.sidebar_width, total_width, total_height, font_data);
     
         self.window
             .update_with_buffer(&full_data, total_width, total_height)
