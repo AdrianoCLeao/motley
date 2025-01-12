@@ -111,7 +111,7 @@ impl Window {
             }
         }
 
-        let font_data = include_bytes!("../../fonts/arial.ttf");
+        let font_data = include_bytes!("../../fonts/Times-New-Roman/times-new-roman.ttf");
         self.menu.render_in_sidebar(&mut full_data, self.sidebar_width, total_width, total_height, font_data);
 
         if let Some((mouse_x, mouse_y)) = self.get_mouse_pos() {
