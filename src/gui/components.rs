@@ -1,49 +1,41 @@
 use crate::gui::Window;
-use glam::*;
+use rfd::FileDialog;
 use std::sync::{Arc, Mutex};
 
 use super::camera::Camera;
 
 /*
 Creates the menu components and adds them to the given window.
-It sets up menu items like "Reset View", "Zoom In", and "Zoom Out"
-and associates their functionality with the appropriate actions.
+It sets up menu items like "Reset View", "Zoom In", "Zoom Out",
+and a new "Upload" button for selecting .glb files.
 */
 pub fn setup_menu(window: &mut Window, camera: Arc<Mutex<Camera>>) {
     {
-        let camera = Arc::clone(&camera);
-        window.add_menu_item("Reset View", 10, 10, 100, 30, move || {
-            let mut cam = camera.lock().unwrap();
-            cam.set_position(Vec3::new(0.0, 0.0, 5.5));
-            cam.set_target(Vec3::ZERO);
+        window.add_menu_item("Print 1", 10, 10, 100, 30, move || {
+            println!("1");
         });
     }
 
     {
-        let camera = Arc::clone(&camera);
-        window.add_menu_item("Zoom In", 10, 50, 100, 30, move || {
-            let mut cam = camera.lock().unwrap();
-            let zoom_factor = 0.5;
-
-            let position = cam.position();
-            let target = cam.target();
-            let direction = (target - position).normalize();
-
-            cam.set_position(position + direction * zoom_factor);
+        window.add_menu_item("Print 2", 10, 50, 100, 30, move || {
+            println!("2");
         });
     }
 
     {
-        let camera = Arc::clone(&camera);
-        window.add_menu_item("Zoom Out", 10, 90, 100, 30, move || {
-            let mut cam = camera.lock().unwrap();
-            let zoom_factor = 0.5;
-
-            let position = cam.position();
-            let target = cam.target();
-            let direction = (target - position).normalize();
-
-            cam.set_position(position - direction * zoom_factor);
+        window.add_menu_item("Print 3", 10, 90, 100, 30, move || {
+            println!("3");
         });
     }
+    
+    window.add_menu_item("Upload", 10, 130, 100, 30, move || {
+        if let Some(path) = FileDialog::new()
+            .add_filter("GLB Files", &["glb"])
+            .pick_file()
+        {
+            println!("Selected file: {}", path.display());
+        } else {
+            println!("No file selected.");
+        }
+    });
 }

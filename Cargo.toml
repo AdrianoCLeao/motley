@@ -15,6 +15,7 @@ serde_json = "1.0.133"
 image = "0.25.5"
 rayon = "1.7"
 rusttype = "0.9"
+rfd = "0.15.2"
 
 [[bench]]
 name = "performance"
