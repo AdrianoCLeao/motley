@@ -29,9 +29,11 @@ pub struct Time {
     frame_count: u64,
     fps_instant: f32,
     fps_rolling: f32,
+    jitter_seconds: f32,
     accumulator_seconds: f64,
     frame_history_seconds: VecDeque<f64>,
     frame_history_sum_seconds: f64,
+    frame_history_sum_squares_seconds: f64,
     last_instant: Instant,
 }
 
@@ -74,9 +76,11 @@ impl Time {
             frame_count: 0,
             fps_instant: 0.0,
             fps_rolling: 0.0,
+            jitter_seconds: 0.0,
             accumulator_seconds: 0.0,
             frame_history_seconds: VecDeque::with_capacity(fps_average_window_samples),
             frame_history_sum_seconds: 0.0,
+            frame_history_sum_squares_seconds: 0.0,
             last_instant: Instant::now(),
         }
     }
@@ -98,23 +102,46 @@ impl Time {
 
         if self.delta_seconds <= 0.0 {
             self.fps_instant = 0.0;
+            self.recalculate_rolling_metrics();
             return;
         }
 
         self.fps_instant = 1.0 / self.delta_seconds;
         self.frame_history_seconds.push_back(clamped_frame_time);
         self.frame_history_sum_seconds += clamped_frame_time;
+        self.frame_history_sum_squares_seconds += clamped_frame_time * clamped_frame_time;
 
         while self.frame_history_seconds.len() > self.config.fps_average_window_samples {
             if let Some(removed) = self.frame_history_seconds.pop_front() {
                 self.frame_history_sum_seconds -= removed;
+                self.frame_history_sum_squares_seconds -= removed * removed;
             }
         }
 
-        if self.frame_history_sum_seconds > 0.0 {
-            self.fps_rolling =
-                (self.frame_history_seconds.len() as f64 / self.frame_history_sum_seconds) as f32;
+        self.recalculate_rolling_metrics();
+    }
+
+    fn recalculate_rolling_metrics(&mut self) {
+        let frame_count = self.frame_history_seconds.len();
+
+        if frame_count == 0 || self.frame_history_sum_seconds <= 0.0 {
+            self.fps_rolling = 0.0;
+            self.jitter_seconds = 0.0;
+            return;
         }
+
+        self.fps_rolling = (frame_count as f64 / self.frame_history_sum_seconds) as f32;
+
+        if frame_count == 1 {
+            self.jitter_seconds = 0.0;
+            return;
+        }
+
+        let sample_count = frame_count as f64;
+        let mean = self.frame_history_sum_seconds / sample_count;
+        let mean_square = self.frame_history_sum_squares_seconds / sample_count;
+        let variance = (mean_square - (mean * mean)).max(0.0);
+        self.jitter_seconds = variance.sqrt() as f32;
     }
 
     pub fn fixed_steps(&mut self) -> FixedStepIterator<'_> {
@@ -154,6 +181,14 @@ impl Time {
 
     pub fn instant_fps(&self) -> f32 {
         self.fps_instant
+    }
+
+    pub fn jitter_seconds(&self) -> f32 {
+        self.jitter_seconds
+    }
+
+    pub fn jitter_milliseconds(&self) -> f32 {
+        self.jitter_seconds * 1000.0
     }
 
     pub fn fps_average_window_samples(&self) -> usize {
@@ -282,5 +317,62 @@ mod tests {
 
         assert_eq!(time.fps_average_window_samples(), 2);
         assert_approx_eq(time.fps() as f64, 2.0 / 0.15, 1e-6);
+    }
+
+    #[test]
+    fn jitter_is_zero_for_stable_frame_time() {
+        let mut time = Time::with_config(TimeConfig {
+            fixed_timestep_seconds: 1.0 / 60.0,
+            max_frame_time_seconds: 1.0,
+            fps_average_window_samples: 16,
+        });
+
+        for _ in 0..10 {
+            time.advance_by(1.0 / 60.0);
+        }
+
+        assert_approx_eq(time.jitter_seconds() as f64, 0.0, 1e-9);
+        assert_approx_eq(time.jitter_milliseconds() as f64, 0.0, 1e-6);
+    }
+
+    #[test]
+    fn jitter_increases_when_frame_spike_occurs() {
+        let mut time = Time::with_config(TimeConfig {
+            fixed_timestep_seconds: 1.0 / 60.0,
+            max_frame_time_seconds: 1.0,
+            fps_average_window_samples: 8,
+        });
+
+        for _ in 0..6 {
+            time.advance_by(1.0 / 60.0);
+        }
+
+        let baseline_jitter = time.jitter_seconds();
+        time.advance_by(0.1);
+
+        assert!(time.jitter_seconds() > baseline_jitter);
+        assert!(time.jitter_milliseconds() > 1.0);
+    }
+
+    #[test]
+    fn long_pause_is_capped_and_recovers_without_backlog() {
+        let mut time = Time::with_config(TimeConfig {
+            fixed_timestep_seconds: 0.05,
+            max_frame_time_seconds: 0.25,
+            fps_average_window_samples: 8,
+        });
+
+        time.advance_by(5.0);
+        let paused_steps: Vec<f32> = time.fixed_steps().collect();
+        let paused_frame_delta = time.delta_seconds();
+
+        time.advance_by(0.05);
+        let resumed_steps: Vec<f32> = time.fixed_steps().collect();
+
+        assert_eq!(paused_steps.len(), 5);
+        assert_eq!(resumed_steps.len(), 1);
+        assert_approx_eq(paused_frame_delta as f64, 0.25, 1e-6);
+        assert_approx_eq(time.elapsed_seconds(), 0.30, 1e-6);
+        assert_eq!(time.frame_count(), 2);
     }
 }

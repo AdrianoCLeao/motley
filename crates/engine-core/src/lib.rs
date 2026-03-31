@@ -73,6 +73,7 @@ impl EngineConfig {
 pub struct FrameStats {
     pub fps_rolling: f32,
     pub fps_instant: f32,
+    pub jitter_seconds: f32,
     pub delta_seconds: f32,
     pub elapsed_seconds: f64,
     pub frame_count: u64,
@@ -149,6 +150,7 @@ impl<M: EngineModules> Engine<M> {
         FrameStats {
             fps_rolling: self.time.fps(),
             fps_instant: self.time.instant_fps(),
+            jitter_seconds: self.time.jitter_seconds(),
             delta_seconds: self.time.delta_seconds(),
             elapsed_seconds: self.time.elapsed_seconds(),
             frame_count: self.time.frame_count(),
@@ -305,6 +307,7 @@ mod tests {
         assert!((stats.elapsed_seconds - 0.25).abs() < 1e-6);
         assert!((stats.fps_rolling - 4.0).abs() < 1e-6);
         assert!((stats.fps_instant - 4.0).abs() < 1e-6);
+        assert!(stats.jitter_seconds >= 0.0);
     }
 
     #[test]
@@ -356,5 +359,36 @@ mod tests {
         assert!(title.contains("Title Test"));
         assert!(title.contains("FPS"));
         assert!(title.contains("VSync Off"));
+    }
+
+    #[test]
+    fn long_pause_uses_frame_cap_and_recovers_next_tick() {
+        let mut engine = Engine::new(
+            EngineConfig {
+                app_name: "Long Pause".to_owned(),
+                window: WindowConfig::default().with_vsync(true),
+                time: TimeConfig {
+                    fixed_timestep_seconds: 0.05,
+                    max_frame_time_seconds: 0.25,
+                    fps_average_window_samples: 8,
+                },
+            },
+            MockModules::default(),
+        )
+        .expect("engine");
+
+        let paused_stats = engine
+            .tick_with_frame_time(5.0)
+            .expect("paused tick should succeed");
+        assert_eq!(engine.modules.fixed_calls, 5);
+        assert!((paused_stats.delta_seconds - 0.25).abs() < 1e-6);
+
+        let resumed_stats = engine
+            .tick_with_frame_time(0.05)
+            .expect("resumed tick should succeed");
+        assert_eq!(engine.modules.fixed_calls, 6);
+        assert!((resumed_stats.delta_seconds - 0.05).abs() < 1e-6);
+        assert!((resumed_stats.elapsed_seconds - 0.30).abs() < 1e-6);
+        assert_eq!(resumed_stats.frame_count, 2);
     }
 }
