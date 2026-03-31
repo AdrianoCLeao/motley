@@ -9,9 +9,8 @@ static LOGGER_INIT: Once = Once::new();
 
 pub fn init_logging() {
     LOGGER_INIT.call_once(|| {
-        let mut builder = env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or("info"),
-        );
+        let mut builder =
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
         builder.format_timestamp_millis();
         let _ = builder.try_init();
     });

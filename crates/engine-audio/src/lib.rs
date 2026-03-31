@@ -1,5 +1,6 @@
 use engine_core::Result;
 
+#[derive(Default)]
 pub struct AudioModule;
 
 impl AudioModule {
@@ -15,9 +16,8 @@ impl AudioModule {
     pub fn backend_type_names(&self) -> (&'static str, &'static str) {
         (
             std::any::type_name::<cpal::SampleRate>(),
-            std::any::type_name::<
-                kira::manager::AudioManagerSettings<kira::manager::DefaultBackend>,
-            >(),
+            std::any::type_name::<kira::manager::AudioManagerSettings<kira::manager::DefaultBackend>>(
+            ),
         )
     }
 }
