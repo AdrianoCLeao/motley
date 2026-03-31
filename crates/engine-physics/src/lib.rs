@@ -1,5 +1,6 @@
 use engine_core::Result;
 
+#[derive(Default)]
 pub struct PhysicsModule;
 
 impl PhysicsModule {
