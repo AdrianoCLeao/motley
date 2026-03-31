@@ -40,7 +40,7 @@ impl EngineConfig {
         Self {
             app_name: app_name.clone(),
             window: WindowConfig::default().with_title(app_name),
-            ..Self::default()
+            time: TimeConfig::default(),
         }
     }
 

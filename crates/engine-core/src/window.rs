@@ -10,6 +10,10 @@ use winit::{
 
 const DEFAULT_VSYNC_FALLBACK_REFRESH_RATE_MILLIHZ: u32 = 60_000;
 
+fn default_frame_interval() -> Duration {
+    Duration::from_secs_f64(1000.0 / DEFAULT_VSYNC_FALLBACK_REFRESH_RATE_MILLIHZ as f64)
+}
+
 pub trait WindowLoop {
     fn tick(&mut self) -> Result<()>;
 
@@ -188,10 +192,6 @@ impl<A: WindowLoop> ApplicationHandler for WindowRunner<A> {
 
                 if let Some(window) = self.window.as_ref() {
                     window.set_title(&self.app.title());
-
-                    if !self.config.vsync {
-                        window.request_redraw();
-                    }
                 }
             }
             _ => {}
@@ -211,11 +211,13 @@ impl<A: WindowLoop> ApplicationHandler for WindowRunner<A> {
             return;
         };
 
-        let Some(frame_interval) = self.frame_interval else {
-            event_loop.set_control_flow(ControlFlow::Wait);
-            window.request_redraw();
-            return;
-        };
+        let frame_interval = self.frame_interval.unwrap_or_else(|| {
+            debug_assert!(
+                false,
+                "vsync enabled but frame_interval was not initialized"
+            );
+            default_frame_interval()
+        });
 
         let now = Instant::now();
         let deadline = self.next_redraw_deadline.unwrap_or(now);
