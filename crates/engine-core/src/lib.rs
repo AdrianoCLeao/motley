@@ -1,11 +1,210 @@
 pub mod error;
+pub mod time;
+pub mod window;
 
 pub use error::{EngineError, Result};
+pub use time::{
+    FixedStepIterator, Time, TimeConfig, DEFAULT_FIXED_TIMESTEP_SECONDS,
+    DEFAULT_FPS_AVERAGE_WINDOW_SAMPLES, DEFAULT_MAX_FRAME_TIME_SECONDS,
+};
+pub use window::{run_windowed, WindowConfig, WindowLoop};
 
 use bevy_ecs::world::World;
 use std::sync::Once;
 
 static LOGGER_INIT: Once = Once::new();
+
+#[derive(Debug, Clone)]
+pub struct EngineConfig {
+    pub app_name: String,
+    pub window: WindowConfig,
+    pub time: TimeConfig,
+}
+
+impl Default for EngineConfig {
+    fn default() -> Self {
+        let app_name = engine_name().to_owned();
+
+        Self {
+            app_name: app_name.clone(),
+            window: WindowConfig::default().with_title(app_name),
+            time: TimeConfig::default(),
+        }
+    }
+}
+
+impl EngineConfig {
+    pub fn with_app_name(app_name: impl Into<String>) -> Self {
+        let app_name = app_name.into();
+
+        Self {
+            app_name: app_name.clone(),
+            window: WindowConfig::default().with_title(app_name),
+            ..Self::default()
+        }
+    }
+
+    pub fn with_window_config(mut self, window: WindowConfig) -> Self {
+        self.window = window;
+        self
+    }
+
+    pub fn with_time_config(mut self, time: TimeConfig) -> Self {
+        self.time = time;
+        self
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.app_name.trim().is_empty() {
+            return Err(EngineError::Config("app_name cannot be empty".to_owned()));
+        }
+
+        if self.window.width == 0 || self.window.height == 0 {
+            return Err(EngineError::Config(
+                "window width and height must be greater than zero".to_owned(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FrameStats {
+    pub fps_rolling: f32,
+    pub fps_instant: f32,
+    pub delta_seconds: f32,
+    pub elapsed_seconds: f64,
+    pub frame_count: u64,
+}
+
+pub trait EngineModules {
+    /// Called once per rendered frame before fixed-step simulation.
+    fn flush_input(&mut self) -> Result<()>;
+
+    /// Called zero or more times per rendered frame using a fixed timestep.
+    fn fixed_update(&mut self, _fixed_dt_seconds: f32) -> Result<()> {
+        Ok(())
+    }
+
+    /// Called once per rendered frame with variable delta time.
+    fn update(&mut self, _delta_seconds: f32) -> Result<()> {
+        Ok(())
+    }
+
+    /// Called once per rendered frame after update with interpolation alpha [0, 1).
+    fn render(&mut self, _alpha: f32) -> Result<()> {
+        Ok(())
+    }
+
+    /// Called when the OS reports a window resize event for the active window.
+    fn resized(&mut self, _width: u32, _height: u32) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub trait Plugin<M: EngineModules> {
+    fn build(&self, engine: &mut Engine<M>);
+}
+
+pub struct Engine<M: EngineModules> {
+    pub world: World,
+    pub time: Time,
+    pub modules: M,
+    pub config: EngineConfig,
+}
+
+impl<M: EngineModules> Engine<M> {
+    pub fn new(config: EngineConfig, modules: M) -> Result<Self> {
+        config.validate()?;
+
+        Ok(Self {
+            world: create_world(),
+            time: Time::with_config(config.time),
+            modules,
+            config,
+        })
+    }
+
+    pub fn add_plugin<P: Plugin<M>>(&mut self, plugin: P) -> &mut Self {
+        plugin.build(self);
+        self
+    }
+
+    pub fn tick(&mut self) -> Result<FrameStats> {
+        self.time.advance();
+        self.run_frame()
+    }
+
+    pub fn tick_with_frame_time(&mut self, frame_time_seconds: f64) -> Result<FrameStats> {
+        self.time.advance_by(frame_time_seconds);
+        self.run_frame()
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+        self.modules.resized(width, height)
+    }
+
+    pub fn frame_stats(&self) -> FrameStats {
+        FrameStats {
+            fps_rolling: self.time.fps(),
+            fps_instant: self.time.instant_fps(),
+            delta_seconds: self.time.delta_seconds(),
+            elapsed_seconds: self.time.elapsed_seconds(),
+            frame_count: self.time.frame_count(),
+        }
+    }
+
+    pub fn window_title(&self) -> String {
+        let vsync_status = if self.config.window.vsync {
+            "VSync On"
+        } else {
+            "VSync Off"
+        };
+
+        format!(
+            "{} | {:.1} FPS | {}",
+            self.config.app_name,
+            self.time.fps(),
+            vsync_status
+        )
+    }
+
+    pub fn run(self) -> Result<()>
+    where
+        M: 'static,
+    {
+        let window_config = self.config.window.clone();
+        run_windowed(window_config, self)
+    }
+
+    fn run_frame(&mut self) -> Result<FrameStats> {
+        self.modules.flush_input()?;
+
+        for fixed_dt in self.time.fixed_steps() {
+            self.modules.fixed_update(fixed_dt)?;
+        }
+
+        self.modules.update(self.time.delta_seconds())?;
+        self.modules.render(self.time.alpha())?;
+
+        Ok(self.frame_stats())
+    }
+}
+
+impl<M: EngineModules> WindowLoop for Engine<M> {
+    fn tick(&mut self) -> Result<()> {
+        Engine::tick(self).map(|_| ())
+    }
+
+    fn resized(&mut self, width: u32, height: u32) -> Result<()> {
+        self.resize(width, height)
+    }
+
+    fn title(&self) -> String {
+        self.window_title()
+    }
+}
 
 pub fn init_logging() {
     LOGGER_INIT.call_once(|| {
@@ -22,4 +221,140 @@ pub fn engine_name() -> &'static str {
 
 pub fn create_world() -> World {
     World::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Engine, EngineConfig, EngineModules, Plugin, TimeConfig, WindowConfig};
+
+    #[derive(Default)]
+    struct MockModules {
+        flush_calls: u32,
+        fixed_calls: u32,
+        update_calls: u32,
+        render_calls: u32,
+        last_delta_seconds: f32,
+        last_alpha: f32,
+        resized_to: Option<(u32, u32)>,
+    }
+
+    impl EngineModules for MockModules {
+        fn flush_input(&mut self) -> super::Result<()> {
+            self.flush_calls += 1;
+            Ok(())
+        }
+
+        fn fixed_update(&mut self, _fixed_dt_seconds: f32) -> super::Result<()> {
+            self.fixed_calls += 1;
+            Ok(())
+        }
+
+        fn update(&mut self, delta_seconds: f32) -> super::Result<()> {
+            self.update_calls += 1;
+            self.last_delta_seconds = delta_seconds;
+            Ok(())
+        }
+
+        fn render(&mut self, alpha: f32) -> super::Result<()> {
+            self.render_calls += 1;
+            self.last_alpha = alpha;
+            Ok(())
+        }
+
+        fn resized(&mut self, width: u32, height: u32) -> super::Result<()> {
+            self.resized_to = Some((width, height));
+            Ok(())
+        }
+    }
+
+    struct AppNamePlugin;
+
+    impl Plugin<MockModules> for AppNamePlugin {
+        fn build(&self, engine: &mut Engine<MockModules>) {
+            engine.config.app_name = "PluginName".to_owned();
+        }
+    }
+
+    #[test]
+    fn engine_tick_executes_stage_order() {
+        let mut engine = Engine::new(
+            EngineConfig {
+                app_name: "Test".to_owned(),
+                window: WindowConfig::default(),
+                time: TimeConfig {
+                    fixed_timestep_seconds: 0.1,
+                    max_frame_time_seconds: 1.0,
+                    fps_average_window_samples: 8,
+                },
+            },
+            MockModules::default(),
+        )
+        .expect("engine should be created");
+
+        let stats = engine
+            .tick_with_frame_time(0.25)
+            .expect("tick should succeed");
+
+        assert_eq!(engine.modules.flush_calls, 1);
+        assert_eq!(engine.modules.fixed_calls, 2);
+        assert_eq!(engine.modules.update_calls, 1);
+        assert_eq!(engine.modules.render_calls, 1);
+        assert!((engine.modules.last_delta_seconds - 0.25).abs() < 1e-6);
+        assert!((engine.modules.last_alpha - 0.5).abs() < 1e-6);
+        assert_eq!(stats.frame_count, 1);
+        assert!((stats.elapsed_seconds - 0.25).abs() < 1e-6);
+        assert!((stats.fps_rolling - 4.0).abs() < 1e-6);
+        assert!((stats.fps_instant - 4.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn plugin_build_updates_engine_configuration() {
+        let mut engine =
+            Engine::new(EngineConfig::default(), MockModules::default()).expect("engine");
+
+        engine.add_plugin(AppNamePlugin);
+
+        assert_eq!(engine.config.app_name, "PluginName");
+    }
+
+    #[test]
+    fn engine_resize_forwards_to_modules() {
+        let mut engine =
+            Engine::new(EngineConfig::default(), MockModules::default()).expect("engine");
+
+        engine.resize(1920, 1080).expect("resize should succeed");
+
+        assert_eq!(engine.modules.resized_to, Some((1920, 1080)));
+    }
+
+    #[test]
+    fn engine_rejects_invalid_window_configuration() {
+        let config = EngineConfig::with_app_name("Test")
+            .with_window_config(WindowConfig::default().with_title("Test").with_size(0, 720));
+
+        let result = Engine::new(config, MockModules::default());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn window_title_exposes_rolling_fps_and_vsync_mode() {
+        let mut engine = Engine::new(
+            EngineConfig::with_app_name("Title Test").with_window_config(
+                WindowConfig::default()
+                    .with_title("Title Test")
+                    .with_vsync(false),
+            ),
+            MockModules::default(),
+        )
+        .expect("engine");
+
+        engine
+            .tick_with_frame_time(0.5)
+            .expect("tick should succeed");
+
+        let title = engine.window_title();
+        assert!(title.contains("Title Test"));
+        assert!(title.contains("FPS"));
+        assert!(title.contains("VSync Off"));
+    }
 }

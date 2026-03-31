@@ -11,3 +11,4 @@ engine-math = { path = "../engine-math" }
 env_logger.workspace = true
 log.workspace = true
 thiserror.workspace = true
+winit.workspace = true
