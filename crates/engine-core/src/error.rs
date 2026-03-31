@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum EngineError {
+    #[error("Configuration error: {0}")]
+    Config(String),
     #[error("Render error: {0}")]
     Render(String),
     #[error("Asset loading failed for '{path}': {reason}")]
