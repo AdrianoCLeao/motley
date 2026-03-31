@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/engine-core",
+    "crates/engine-render",
+    "crates/engine-physics",
+    "crates/engine-audio",
+    "crates/engine-input",
+    "crates/engine-assets",
+    "crates/engine-math",
+    "examples/sandbox",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Adriano Leao"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+bevy_ecs = { version = "0.15", default-features = false }
+wgpu = { version = "22", default-features = false, features = ["wgsl", "dx12", "metal", "webgpu"] }
+winit = { version = "0.30" }
+glam = { version = "0.29", features = ["serde"] }
+rapier3d = { version = "0.22" }
+rapier2d = { version = "0.22" }
+kira = { version = "0.9" }
+cpal = { version = "0.15" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+gltf = { version = "1.4" }
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"
+notify = "6"
+gilrs = "0.11"
+log = "0.4"
+env_logger = "0.11"
+anyhow = "1"
+thiserror = "1"

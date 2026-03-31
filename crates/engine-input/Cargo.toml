@@ -1,0 +1,12 @@
+[package]
+name = "engine-input"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+engine-core = { path = "../engine-core" }
+gilrs.workspace = true
+log.workspace = true
+winit.workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "engine-physics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+engine-core = { path = "../engine-core" }
+log.workspace = true
+rapier2d.workspace = true
+rapier3d.workspace = true

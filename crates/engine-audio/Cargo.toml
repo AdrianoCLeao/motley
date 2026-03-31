@@ -1,0 +1,12 @@
+[package]
+name = "engine-audio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+cpal.workspace = true
+engine-core = { path = "../engine-core" }
+kira.workspace = true
+log.workspace = true

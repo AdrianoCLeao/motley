@@ -1,0 +1,16 @@
+[package]
+name = "engine-assets"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+engine-core = { path = "../engine-core" }
+gltf.workspace = true
+image.workspace = true
+log.workspace = true
+notify.workspace = true
+ron.workspace = true
+serde.workspace = true

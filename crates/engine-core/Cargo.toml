@@ -1,0 +1,13 @@
+[package]
+name = "engine-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy_ecs.workspace = true
+engine-math = { path = "../engine-math" }
+env_logger.workspace = true
+log.workspace = true
+thiserror.workspace = true
