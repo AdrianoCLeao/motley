@@ -4,12 +4,14 @@ use std::time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{ElementState, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowAttributes, WindowId},
 };
 
 const DEFAULT_VSYNC_FALLBACK_REFRESH_RATE_MILLIHZ: u32 = 60_000;
+const ESCAPE_CONFIRM_WINDOW: Duration = Duration::from_secs(2);
 
 fn default_frame_interval() -> Duration {
     Duration::from_secs_f64(1000.0 / DEFAULT_VSYNC_FALLBACK_REFRESH_RATE_MILLIHZ as f64)
@@ -21,6 +23,10 @@ pub trait WindowLoop {
     }
 
     fn tick(&mut self) -> Result<()>;
+
+    fn window_event(&mut self, _event: &WindowEvent) -> Result<()> {
+        Ok(())
+    }
 
     fn resized(&mut self, _width: u32, _height: u32) -> Result<()> {
         Ok(())
@@ -108,6 +114,7 @@ struct WindowRunner<A: WindowLoop> {
     window_id: Option<WindowId>,
     frame_interval: Option<Duration>,
     next_redraw_deadline: Option<Instant>,
+    last_escape_press: Option<Instant>,
     error: Option<EngineError>,
 }
 
@@ -120,8 +127,44 @@ impl<A: WindowLoop> WindowRunner<A> {
             window: None,
             window_id: None,
             next_redraw_deadline: None,
+            last_escape_press: None,
             error: None,
         }
+    }
+
+    fn maybe_confirm_escape_exit(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        event: &WindowEvent,
+    ) -> bool {
+        let WindowEvent::KeyboardInput { event, .. } = event else {
+            return false;
+        };
+
+        if event.state != ElementState::Pressed || event.repeat {
+            return false;
+        }
+
+        if !matches!(event.physical_key, PhysicalKey::Code(KeyCode::Escape)) {
+            return false;
+        }
+
+        let now = Instant::now();
+        if let Some(last_press) = self.last_escape_press {
+            if now.duration_since(last_press) <= ESCAPE_CONFIRM_WINDOW {
+                log::info!(target: "engine::window", "Escape confirmation received, exiting application");
+                event_loop.exit();
+                self.last_escape_press = None;
+                return true;
+            }
+        }
+
+        self.last_escape_press = Some(now);
+        log::warn!(
+            target: "engine::window",
+            "Press Escape again within 2 seconds to exit"
+        );
+        true
     }
 
     fn take_error(&mut self) -> Option<EngineError> {
@@ -185,6 +228,15 @@ impl<A: WindowLoop> ApplicationHandler for WindowRunner<A> {
         event: WindowEvent,
     ) {
         if self.window_id != Some(window_id) {
+            return;
+        }
+
+        if let Err(error) = self.app.window_event(&event) {
+            self.fail(event_loop, error);
+            return;
+        }
+
+        if self.maybe_confirm_escape_exit(event_loop, &event) {
             return;
         }
 

@@ -18,6 +18,7 @@ pub use transform::{
     propagate_transforms, Children, GlobalTransform, Parent, SpatialBundle, Transform,
 };
 pub use window::{run_windowed, WindowConfig, WindowLoop};
+pub use winit::event::WindowEvent;
 pub use winit::window::Window;
 
 use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::World};
@@ -90,6 +91,27 @@ pub struct FrameStats {
     pub frame_count: u64,
 }
 
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct FrameTime {
+    pub delta_seconds: f32,
+    pub fixed_delta_seconds: f32,
+    pub alpha: f32,
+    pub elapsed_seconds: f64,
+    pub frame_count: u64,
+}
+
+impl Default for FrameTime {
+    fn default() -> Self {
+        Self {
+            delta_seconds: 0.0,
+            fixed_delta_seconds: DEFAULT_FIXED_TIMESTEP_SECONDS as f32,
+            alpha: 0.0,
+            elapsed_seconds: 0.0,
+            frame_count: 0,
+        }
+    }
+}
+
 pub trait EngineModules {
     /// Called once after the OS window has been created and before the first redraw.
     fn window_created(
@@ -100,8 +122,13 @@ pub trait EngineModules {
         Ok(())
     }
 
+    /// Called for each window event dispatched by the window loop.
+    fn window_event(&mut self, _event: &WindowEvent) -> Result<()> {
+        Ok(())
+    }
+
     /// Called once per rendered frame before fixed-step simulation.
-    fn flush_input(&mut self) -> Result<()>;
+    fn flush_input(&mut self, _world: &mut World) -> Result<()>;
 
     /// Called zero or more times per rendered frame using a fixed timestep.
     fn fixed_update(&mut self, _fixed_dt_seconds: f32) -> Result<()> {
@@ -154,6 +181,7 @@ impl<M: EngineModules> Engine<M> {
 
         engine
             .insert_resource(window_size)
+            .insert_resource(FrameTime::default())
             .add_pre_render_systems(propagate_transforms)
             .add_pre_render_systems(sync_camera_aspect_from_window);
 
@@ -252,12 +280,20 @@ impl<M: EngineModules> Engine<M> {
     }
 
     fn run_frame(&mut self) -> Result<FrameStats> {
+        self.world.insert_resource(FrameTime {
+            delta_seconds: self.time.delta_seconds(),
+            fixed_delta_seconds: self.time.fixed_delta_seconds(),
+            alpha: self.time.alpha(),
+            elapsed_seconds: self.time.elapsed_seconds(),
+            frame_count: self.time.frame_count(),
+        });
+
         if !self.startup_completed {
             self.schedules.startup.run(&mut self.world);
             self.startup_completed = true;
         }
 
-        self.modules.flush_input()?;
+        self.modules.flush_input(&mut self.world)?;
 
         for fixed_dt in self.time.fixed_steps() {
             self.schedules.fixed_update.run(&mut self.world);
@@ -278,6 +314,10 @@ impl<M: EngineModules> Engine<M> {
 impl<M: EngineModules> WindowLoop for Engine<M> {
     fn window_created(&mut self, window: Arc<Window>, window_config: &WindowConfig) -> Result<()> {
         self.modules.window_created(window, window_config)
+    }
+
+    fn window_event(&mut self, event: &WindowEvent) -> Result<()> {
+        self.modules.window_event(event)
     }
 
     fn tick(&mut self) -> Result<()> {
@@ -395,7 +435,7 @@ mod tests {
     }
 
     impl EngineModules for MockModules {
-        fn flush_input(&mut self) -> super::Result<()> {
+        fn flush_input(&mut self, _world: &mut World) -> super::Result<()> {
             self.flush_calls += 1;
             Ok(())
         }
