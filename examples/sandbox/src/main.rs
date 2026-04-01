@@ -1,21 +1,24 @@
-use bevy_ecs::prelude::{Commands, Query, Res, Resource, With};
+use bevy_ecs::prelude::{Commands, Query, Res, ResMut, Resource, With};
 use bevy_ecs::world::World;
 use engine_assets::{AssetModule, MaterialHandle, MeshHandle, TextureHandle};
 use engine_audio::AudioModule;
 use engine_core::{
-    self, Camera2d, Camera3d, Children, Engine, EngineConfig, EngineModules, Parent, Plugin,
-    PrimaryCamera, RenderLayer2D, RenderLayer3D, Result, SpatialBundle, Transform, Visible,
-    WindowConfig,
+    self, Camera2d, Camera3d, Children, Engine, EngineConfig, EngineModules, FrameTime, Parent,
+    Plugin, PrimaryCamera, RenderLayer3D, Result, SpatialBundle, Transform, Visible, WindowConfig,
+    WindowEvent,
 };
-use engine_input::InputModule;
-use engine_math::Vec3;
+use engine_input::{InputModule, InputState};
+use engine_math::{glam::EulerRot, Quat, Vec2, Vec3};
 use engine_physics::{
     physics_fixed_update_systems_3d, ColliderEntityMap3D, ColliderShape3D, PhysicsEntityHandles3D,
     PhysicsStepConfig3D, PhysicsWorld3D, RigidBody3DBundle, RigidBodyType,
 };
-use engine_render::{MeshRenderable3d, RenderModule, SpriteRenderable2d};
+use engine_render::{MeshRenderable3d, RenderModule};
+use gilrs::{Axis, Button};
+use std::path::Path;
 use std::sync::{Arc, Once};
 use winit::window::Window;
+use winit::{event::MouseButton, keyboard::KeyCode};
 
 static ECS_UPDATE_LOG_ONCE: Once = Once::new();
 
@@ -58,7 +61,10 @@ fn ecs_spawn_smoke_entities(mut commands: Commands) {
     commands.entity(parent).insert(Children(vec![child]));
 
     commands.spawn((
-        SpatialBundle::default(),
+        SpatialBundle {
+            transform: Transform::from_xyz(0.0, 5.0, 10.0),
+            ..SpatialBundle::default()
+        },
         Camera3d::default(),
         PrimaryCamera,
         Visible,
@@ -104,21 +110,9 @@ fn ecs_spawn_renderable_entity(
         RenderLayer3D,
     ));
 
-    commands.spawn((
-        SpatialBundle {
-            transform: Transform::from_xyz(420.0, -220.0, 0.0),
-            ..SpatialBundle::default()
-        },
-        SpriteRenderable2d::new(render_assets.texture)
-            .with_size(256.0, 256.0)
-            .with_color([1.0, 1.0, 1.0, 0.92]),
-        Visible,
-        RenderLayer2D,
-    ));
-
     log::info!(
         target: "engine::sandbox",
-        "Spawned 3D mesh and 2D sprite entities for EP-04 render validation"
+        "Spawned 3D mesh entity for EP-04 render validation"
     );
 }
 
@@ -201,6 +195,109 @@ fn ecs_update_smoke(
     });
 }
 
+#[derive(Resource, Default)]
+struct CameraLookState {
+    yaw: f32,
+    pitch: f32,
+    initialized: bool,
+}
+
+fn keyboard_movement_intent(input: &InputState) -> Vec3 {
+    let mut movement = Vec3::ZERO;
+
+    if input.key_held(KeyCode::KeyW) {
+        movement.z += 1.0;
+    }
+    if input.key_held(KeyCode::KeyS) {
+        movement.z -= 1.0;
+    }
+    if input.key_held(KeyCode::KeyA) {
+        movement.x -= 1.0;
+    }
+    if input.key_held(KeyCode::KeyD) {
+        movement.x += 1.0;
+    }
+    if input.key_held(KeyCode::Space) {
+        movement.y += 1.0;
+    }
+    if input.key_held(KeyCode::ShiftLeft) || input.key_held(KeyCode::ShiftRight) {
+        movement.y -= 1.0;
+    }
+
+    movement
+}
+
+fn ecs_camera_controller(
+    input: Res<InputState>,
+    frame_time: Res<FrameTime>,
+    mut look_state: ResMut<CameraLookState>,
+    mut cameras: Query<&mut Transform, (With<Camera3d>, With<PrimaryCamera>)>,
+) {
+    let Ok(mut transform) = cameras.get_single_mut() else {
+        return;
+    };
+
+    if !look_state.initialized {
+        let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+        look_state.yaw = yaw;
+        look_state.pitch = pitch;
+        look_state.initialized = true;
+    }
+
+    let mut movement = keyboard_movement_intent(&input);
+
+    let mut mouse_look_delta = Vec2::ZERO;
+    if input.mouse_held(MouseButton::Right) {
+        mouse_look_delta = input.mouse_delta;
+    }
+
+    let mut gamepad_look_delta = Vec2::ZERO;
+    if let Some(gamepad) = input.first_connected_gamepad() {
+        movement.x += input.gamepad_axis(gamepad, Axis::LeftStickX);
+        movement.z += -input.gamepad_axis(gamepad, Axis::LeftStickY);
+
+        if input.gamepad_button_held(gamepad, Button::South)
+            || input.gamepad_button_held(gamepad, Button::RightTrigger)
+            || input.gamepad_button_held(gamepad, Button::RightTrigger2)
+        {
+            movement.y += 1.0;
+        }
+
+        if input.gamepad_button_held(gamepad, Button::East)
+            || input.gamepad_button_held(gamepad, Button::LeftTrigger)
+            || input.gamepad_button_held(gamepad, Button::LeftTrigger2)
+        {
+            movement.y -= 1.0;
+        }
+
+        gamepad_look_delta.x = input.gamepad_axis(gamepad, Axis::RightStickX);
+        gamepad_look_delta.y = input.gamepad_axis(gamepad, Axis::RightStickY);
+    }
+
+    const LOOK_SENSITIVITY_DEGREES: f32 = 0.12;
+    let mouse_sensitivity_radians = LOOK_SENSITIVITY_DEGREES.to_radians();
+    look_state.yaw -= mouse_look_delta.x * mouse_sensitivity_radians;
+    look_state.pitch -= mouse_look_delta.y * mouse_sensitivity_radians;
+
+    let gamepad_look_speed_radians = 2.5;
+    look_state.yaw -= gamepad_look_delta.x * gamepad_look_speed_radians * frame_time.delta_seconds;
+    look_state.pitch -=
+        gamepad_look_delta.y * gamepad_look_speed_radians * frame_time.delta_seconds;
+
+    let pitch_limit = 89.0_f32.to_radians();
+    look_state.pitch = look_state.pitch.clamp(-pitch_limit, pitch_limit);
+    transform.rotation = Quat::from_euler(EulerRot::YXZ, look_state.yaw, look_state.pitch, 0.0);
+
+    if movement.length_squared() > 0.0 {
+        movement = movement.normalize();
+        let forward = transform.rotation * Vec3::new(0.0, 0.0, -1.0);
+        let right = transform.rotation * Vec3::new(1.0, 0.0, 0.0);
+        let world_movement = right * movement.x + forward * movement.z + Vec3::Y * movement.y;
+
+        transform.translation += world_movement * 5.0 * frame_time.delta_seconds;
+    }
+}
+
 struct SandboxModules {
     renderer: RenderModule,
     audio: AudioModule,
@@ -228,8 +325,16 @@ impl EngineModules for SandboxModules {
             .initialize_with_window(window, window_config.vsync)
     }
 
-    fn flush_input(&mut self) -> Result<()> {
-        self.input.pump()
+    fn window_event(&mut self, event: &WindowEvent) -> Result<()> {
+        self.input.handle_window_event(event)
+    }
+
+    fn flush_input(&mut self, world: &mut World) -> Result<()> {
+        let Some(mut input_state) = world.get_resource_mut::<InputState>() else {
+            return Ok(());
+        };
+
+        self.input.pump(&mut input_state)
     }
 
     fn fixed_update(&mut self, _fixed_dt_seconds: f32) -> Result<()> {
@@ -271,7 +376,29 @@ impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
             .insert_resource(PhysicsWorld3D::with_timestep(fixed_dt_seconds))
             .insert_resource(PhysicsStepConfig3D::new(fixed_dt_seconds))
             .insert_resource(ColliderEntityMap3D::default())
-            .insert_resource(PhysicsEntityHandles3D::default());
+            .insert_resource(PhysicsEntityHandles3D::default())
+            .insert_resource(InputState::default())
+            .insert_resource(CameraLookState::default());
+
+        match engine
+            .modules
+            .audio
+            .play_music_with_fallback(Path::new("assets/audio/ambient"))
+        {
+            Ok(_) => {
+                log::info!(
+                    target: "engine::sandbox",
+                    "EP-06 music playback started with fallback order OGG->WAV->MP3"
+                );
+            }
+            Err(error) => {
+                log::warn!(
+                    target: "engine::sandbox",
+                    "EP-06 music playback unavailable (continuing without audio): {}",
+                    error
+                );
+            }
+        }
 
         let render_assets = (|| -> Result<SandboxRenderAssets> {
             let texture = engine
@@ -313,6 +440,7 @@ impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
             .add_startup_systems(ecs_spawn_renderable_entity)
             .add_startup_systems(ecs_spawn_physics_scene)
             .add_fixed_update_systems(physics_fixed_update_systems_3d())
+            .add_update_systems(ecs_camera_controller)
             .add_update_systems(ecs_update_smoke);
 
         log::info!(target: "engine::sandbox", "Engine: {}", engine_core::engine_name());
@@ -361,5 +489,28 @@ fn main() {
     if let Err(error) = run() {
         log::error!(target: "engine::sandbox", "Startup failed: {}", error);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keyboard_movement_intent;
+    use engine_input::InputState;
+    use winit::{event::ElementState, keyboard::KeyCode};
+
+    #[test]
+    fn keyboard_forward_and_backward_mapping_is_not_inverted() {
+        let mut input = InputState::default();
+
+        input.begin_frame();
+        input.process_key_input(KeyCode::KeyW, ElementState::Pressed, false);
+        let forward_movement = keyboard_movement_intent(&input);
+        assert!(forward_movement.z > 0.0);
+
+        input.begin_frame();
+        input.process_key_input(KeyCode::KeyW, ElementState::Released, false);
+        input.process_key_input(KeyCode::KeyS, ElementState::Pressed, false);
+        let backward_movement = keyboard_movement_intent(&input);
+        assert!(backward_movement.z < 0.0);
     }
 }
