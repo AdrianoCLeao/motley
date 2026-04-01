@@ -91,7 +91,11 @@ fn ecs_spawn_renderable_entity(
             transform: Transform::from_xyz(0.0, 0.0, -3.0),
             ..SpatialBundle::default()
         },
-        MeshRenderable3d::new(render_assets.mesh, render_assets.texture, render_assets.material),
+        MeshRenderable3d::new(
+            render_assets.mesh,
+            render_assets.texture,
+            render_assets.material,
+        ),
         Visible,
         RenderLayer3D,
     ));

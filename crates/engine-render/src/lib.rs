@@ -3,7 +3,9 @@ use bevy_ecs::{
     query::With,
 };
 use bytemuck::{Pod, Zeroable};
-use engine_assets::{AssetId, AssetServer, MaterialData, MaterialHandle, MeshHandle, TextureHandle};
+use engine_assets::{
+    AssetId, AssetServer, MaterialData, MaterialHandle, MeshHandle, TextureHandle,
+};
 use engine_core::{
     Camera2d, Camera3d, EngineError, GlobalTransform, PrimaryCamera, RenderLayer2D, RenderLayer3D,
     Result, Visible,
@@ -396,7 +398,8 @@ impl RenderState {
             );
         }
 
-        let camera_2d_uniform = extract_camera_uniform_2d(world, self.config.width, self.config.height);
+        let camera_2d_uniform =
+            extract_camera_uniform_2d(world, self.config.width, self.config.height);
         self.queue.write_buffer(
             &self.pipeline_2d.camera_buffer,
             0,
@@ -601,7 +604,8 @@ impl RenderState {
             render_pass.set_bind_group(1, model_bind_group, &[]);
             render_pass.set_bind_group(2, material_bind_group, &[]);
             render_pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass
+                .set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..gpu_mesh.index_count, 0, 0..1);
         }
     }
@@ -662,8 +666,7 @@ impl RenderState {
         while batch_start < draw_items.len() {
             let texture = draw_items[batch_start].texture;
             let mut batch_end = batch_start + 1;
-            while batch_end < draw_items.len()
-                && draw_items[batch_end].texture.id() == texture.id()
+            while batch_end < draw_items.len() && draw_items[batch_end].texture.id() == texture.id()
             {
                 batch_end += 1;
             }
@@ -729,13 +732,13 @@ impl RenderState {
             EngineError::Render("mesh index count overflow for u32 draw call".to_owned())
         })?;
 
-        let vertex_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("engine-render-mesh-vertex-buffer"),
-                    contents: bytemuck::cast_slice(&vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("engine-render-mesh-vertex-buffer"),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
         let index_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1175,7 +1178,11 @@ fn extract_camera_uniform_3d(world: &mut World) -> Option<Camera3dUniform> {
     })
 }
 
-fn extract_camera_uniform_2d(world: &mut World, viewport_width: u32, viewport_height: u32) -> Camera2dUniform {
+fn extract_camera_uniform_2d(
+    world: &mut World,
+    viewport_width: u32,
+    viewport_height: u32,
+) -> Camera2dUniform {
     let mut query = world.query_filtered::<(&Camera2d, &GlobalTransform), With<PrimaryCamera>>();
 
     let view_proj = if let Some((camera, global_transform)) = query.iter(world).next() {
@@ -1184,7 +1191,14 @@ fn extract_camera_uniform_2d(world: &mut World, viewport_width: u32, viewport_he
     } else {
         let width = viewport_width.max(1) as f32;
         let height = viewport_height.max(1) as f32;
-        Mat4::orthographic_rh(-width * 0.5, width * 0.5, -height * 0.5, height * 0.5, -1.0, 1.0)
+        Mat4::orthographic_rh(
+            -width * 0.5,
+            width * 0.5,
+            -height * 0.5,
+            height * 0.5,
+            -1.0,
+            1.0,
+        )
     };
 
     Camera2dUniform {
@@ -1231,7 +1245,12 @@ fn collect_draw_items_2d(world: &mut World) -> Vec<DrawItem2d> {
             texture: sprite.texture,
             model: model.to_cols_array_2d(),
             color: sprite.color,
-            uv_rect: [sprite.uv_min[0], sprite.uv_min[1], sprite.uv_max[0], sprite.uv_max[1]],
+            uv_rect: [
+                sprite.uv_min[0],
+                sprite.uv_min[1],
+                sprite.uv_max[0],
+                sprite.uv_max[1],
+            ],
             sort_z: translation.z,
         });
     }
