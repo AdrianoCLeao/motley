@@ -111,7 +111,6 @@ impl HandleRegistry {
     fn mark_failed<T>(&mut self, handle: Handle<T>) {
         if let Some(record) = self.id_to_record.get_mut(&handle.id) {
             record.state = AssetState::Failed;
-            record.generation = record.generation.saturating_add(1);
         }
     }
 

@@ -18,10 +18,10 @@ pub use transform::{
     propagate_transforms, Children, GlobalTransform, Parent, SpatialBundle, Transform,
 };
 pub use window::{run_windowed, WindowConfig, WindowLoop};
+pub use winit::window::Window;
 
 use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::World};
 use std::sync::{Arc, Once};
-use winit::window::Window;
 
 static LOGGER_INIT: Once = Once::new();
 
