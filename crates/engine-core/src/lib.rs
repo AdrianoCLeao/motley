@@ -20,7 +20,8 @@ pub use transform::{
 pub use window::{run_windowed, WindowConfig, WindowLoop};
 
 use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::World};
-use std::sync::Once;
+use std::sync::{Arc, Once};
+use winit::window::Window;
 
 static LOGGER_INIT: Once = Once::new();
 
@@ -90,6 +91,15 @@ pub struct FrameStats {
 }
 
 pub trait EngineModules {
+    /// Called once after the OS window has been created and before the first redraw.
+    fn window_created(
+        &mut self,
+        _window: Arc<Window>,
+        _window_config: &WindowConfig,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// Called once per rendered frame before fixed-step simulation.
     fn flush_input(&mut self) -> Result<()>;
 
@@ -104,7 +114,7 @@ pub trait EngineModules {
     }
 
     /// Called once per rendered frame after update with interpolation alpha [0, 1).
-    fn render(&mut self, _alpha: f32) -> Result<()> {
+    fn render(&mut self, _world: &mut World, _alpha: f32) -> Result<()> {
         Ok(())
     }
 
@@ -258,13 +268,18 @@ impl<M: EngineModules> Engine<M> {
         self.modules.update(self.time.delta_seconds())?;
 
         self.schedules.pre_render.run(&mut self.world);
-        self.modules.render(self.time.alpha())?;
+        let alpha = self.time.alpha();
+        self.modules.render(&mut self.world, alpha)?;
 
         Ok(self.frame_stats())
     }
 }
 
 impl<M: EngineModules> WindowLoop for Engine<M> {
+    fn window_created(&mut self, window: Arc<Window>, window_config: &WindowConfig) -> Result<()> {
+        self.modules.window_created(window, window_config)
+    }
+
     fn tick(&mut self) -> Result<()> {
         Engine::tick(self).map(|_| ())
     }
@@ -298,7 +313,7 @@ pub fn create_world() -> World {
 #[cfg(test)]
 mod tests {
     use super::{Engine, EngineConfig, EngineModules, Plugin, TimeConfig, WindowConfig};
-    use bevy_ecs::prelude::{Changed, Commands, Component, Query, ResMut, Resource};
+    use bevy_ecs::prelude::{Changed, Commands, Component, Query, ResMut, Resource, World};
 
     #[derive(Resource, Default)]
     struct EcsCounters {
@@ -396,7 +411,7 @@ mod tests {
             Ok(())
         }
 
-        fn render(&mut self, alpha: f32) -> super::Result<()> {
+        fn render(&mut self, _world: &mut World, alpha: f32) -> super::Result<()> {
             self.render_calls += 1;
             self.last_alpha = alpha;
             Ok(())

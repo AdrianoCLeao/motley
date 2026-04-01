@@ -1,4 +1,5 @@
 use crate::{EngineError, Result};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
@@ -15,6 +16,10 @@ fn default_frame_interval() -> Duration {
 }
 
 pub trait WindowLoop {
+    fn window_created(&mut self, _window: Arc<Window>, _config: &WindowConfig) -> Result<()> {
+        Ok(())
+    }
+
     fn tick(&mut self) -> Result<()>;
 
     fn resized(&mut self, _width: u32, _height: u32) -> Result<()> {
@@ -99,7 +104,7 @@ where
 struct WindowRunner<A: WindowLoop> {
     config: WindowConfig,
     app: A,
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
     window_id: Option<WindowId>,
     frame_interval: Option<Duration>,
     next_redraw_deadline: Option<Instant>,
@@ -142,6 +147,7 @@ impl<A: WindowLoop> ApplicationHandler for WindowRunner<A> {
 
         match event_loop.create_window(attributes) {
             Ok(window) => {
+                let window = Arc::new(window);
                 self.frame_interval = frame_interval_from_refresh_rate(
                     self.config.vsync,
                     window
@@ -150,6 +156,11 @@ impl<A: WindowLoop> ApplicationHandler for WindowRunner<A> {
                 );
                 self.window_id = Some(window.id());
                 self.next_redraw_deadline = Some(Instant::now());
+
+                if let Err(error) = self.app.window_created(window.clone(), &self.config) {
+                    self.fail(event_loop, error);
+                    return;
+                }
 
                 if !self.config.vsync {
                     event_loop.set_control_flow(ControlFlow::Poll);
