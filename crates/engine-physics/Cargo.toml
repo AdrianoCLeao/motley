@@ -6,7 +6,9 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+bevy_ecs.workspace = true
 engine-core = { path = "../engine-core" }
+engine-math = { path = "../engine-math" }
 log.workspace = true
 rapier2d.workspace = true
 rapier3d.workspace = true
