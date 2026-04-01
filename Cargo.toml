@@ -19,6 +19,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 bevy_ecs = { version = "0.15", default-features = false }
+bytemuck = { version = "1.19", features = ["derive"] }
 wgpu = { version = "22", default-features = false, features = ["wgsl", "dx12", "metal", "webgpu"] }
 winit = { version = "0.30" }
 glam = { version = "0.29", features = ["serde"] }
