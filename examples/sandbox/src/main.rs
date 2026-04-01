@@ -8,7 +8,11 @@ use engine_core::{
     WindowConfig,
 };
 use engine_input::InputModule;
-use engine_physics::PhysicsModule;
+use engine_math::Vec3;
+use engine_physics::{
+    physics_fixed_update_systems_3d, ColliderEntityMap3D, ColliderShape3D, PhysicsEntityHandles3D,
+    PhysicsStepConfig3D, PhysicsWorld3D, RigidBody3DBundle, RigidBodyType,
+};
 use engine_render::{MeshRenderable3d, RenderModule, SpriteRenderable2d};
 use std::sync::{Arc, Once};
 use winit::window::Window;
@@ -118,6 +122,68 @@ fn ecs_spawn_renderable_entity(
     );
 }
 
+fn ecs_spawn_physics_scene(
+    mut commands: Commands,
+    render_assets: Option<Res<SandboxRenderAssets>>,
+) {
+    let render_assets = render_assets.map(|assets| *assets);
+
+    let mut floor_transform = Transform::from_xyz(0.0, -0.5, 0.0);
+    floor_transform.scale = Vec3::new(40.0, 1.0, 40.0);
+
+    let mut floor = commands.spawn((
+        RigidBody3DBundle {
+            body_type: RigidBodyType::Static,
+            shape: ColliderShape3D::Box {
+                half_extents: Vec3::new(20.0, 0.5, 20.0),
+            },
+            transform: floor_transform,
+            ..RigidBody3DBundle::default()
+        },
+        Visible,
+        RenderLayer3D,
+    ));
+
+    if let Some(render_assets) = render_assets {
+        floor.insert(MeshRenderable3d::new(
+            render_assets.mesh,
+            render_assets.texture,
+            render_assets.material,
+        ));
+    }
+
+    for index in 0..5 {
+        let x = index as f32 * 1.6 - 3.2;
+        let y = 5.0 + (index as f32 * 0.75);
+
+        let mut cube = commands.spawn((
+            RigidBody3DBundle {
+                body_type: RigidBodyType::Dynamic,
+                shape: ColliderShape3D::Box {
+                    half_extents: Vec3::splat(0.5),
+                },
+                transform: Transform::from_xyz(x, y, 0.0),
+                ..RigidBody3DBundle::default()
+            },
+            Visible,
+            RenderLayer3D,
+        ));
+
+        if let Some(render_assets) = render_assets {
+            cube.insert(MeshRenderable3d::new(
+                render_assets.mesh,
+                render_assets.texture,
+                render_assets.material,
+            ));
+        }
+    }
+
+    log::info!(
+        target: "engine::sandbox",
+        "Spawned EP-05 physics validation scene (static floor + dynamic cubes)"
+    );
+}
+
 fn ecs_update_smoke(
     primary_cameras: Query<(), With<PrimaryCamera>>,
     parented_entities: Query<(), With<Parent>>,
@@ -137,7 +203,6 @@ fn ecs_update_smoke(
 
 struct SandboxModules {
     renderer: RenderModule,
-    physics: PhysicsModule,
     audio: AudioModule,
     input: InputModule,
     assets: AssetModule,
@@ -150,7 +215,6 @@ impl SandboxModules {
 
         Ok(Self {
             renderer: RenderModule::new(),
-            physics: PhysicsModule::new(),
             audio: AudioModule::new(),
             input: InputModule::new(),
             assets,
@@ -168,8 +232,9 @@ impl EngineModules for SandboxModules {
         self.input.pump()
     }
 
-    fn fixed_update(&mut self, fixed_dt_seconds: f32) -> Result<()> {
-        self.physics.step(fixed_dt_seconds)
+    fn fixed_update(&mut self, _fixed_dt_seconds: f32) -> Result<()> {
+        // Physics simulation is driven by ECS FixedUpdate systems.
+        Ok(())
     }
 
     fn update(&mut self, _delta_seconds: f32) -> Result<()> {
@@ -200,6 +265,13 @@ struct SandboxBootstrapPlugin;
 impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
     fn build(&self, engine: &mut Engine<SandboxModules>) {
         let _identity = engine_math::identity();
+        let fixed_dt_seconds = engine.time.fixed_delta_seconds();
+
+        engine
+            .insert_resource(PhysicsWorld3D::with_timestep(fixed_dt_seconds))
+            .insert_resource(PhysicsStepConfig3D::new(fixed_dt_seconds))
+            .insert_resource(ColliderEntityMap3D::default())
+            .insert_resource(PhysicsEntityHandles3D::default());
 
         let render_assets = (|| -> Result<SandboxRenderAssets> {
             let texture = engine
@@ -239,6 +311,8 @@ impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
             .add_startup_systems(ecs_startup_smoke)
             .add_startup_systems(ecs_spawn_smoke_entities)
             .add_startup_systems(ecs_spawn_renderable_entity)
+            .add_startup_systems(ecs_spawn_physics_scene)
+            .add_fixed_update_systems(physics_fixed_update_systems_3d())
             .add_update_systems(ecs_update_smoke);
 
         log::info!(target: "engine::sandbox", "Engine: {}", engine_core::engine_name());
