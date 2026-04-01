@@ -3,9 +3,9 @@ use bevy_ecs::world::World;
 use engine_assets::{AssetModule, MaterialHandle, MeshHandle, TextureHandle};
 use engine_audio::AudioModule;
 use engine_core::{
-    self, Camera2d, Camera3d, Children, Engine, EngineConfig, EngineModules, FrameTime, Parent,
-    Plugin, PrimaryCamera, RenderLayer3D, Result, SpatialBundle, Transform, Visible, WindowConfig,
-    WindowEvent,
+    self, Camera2d, Camera3d, Children, Engine, EngineConfig, EngineModules, FrameTime,
+    HardeningConfig, Parent, Plugin, PrimaryCamera, RenderLayer3D, Result, SpatialBundle,
+    Transform, Visible, WindowConfig, WindowEvent,
 };
 use engine_input::{InputModule, InputState};
 use engine_math::{glam::EulerRot, Quat, Vec2, Vec3};
@@ -371,6 +371,14 @@ impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
     fn build(&self, engine: &mut Engine<SandboxModules>) {
         let _identity = engine_math::identity();
         let fixed_dt_seconds = engine.time.fixed_delta_seconds();
+        let hardening = engine
+            .world
+            .get_resource::<HardeningConfig>()
+            .copied()
+            .unwrap_or_default();
+
+        engine.modules.input.configure_hardening(hardening);
+        engine.modules.assets.configure_hardening(hardening);
 
         engine
             .insert_resource(PhysicsWorld3D::with_timestep(fixed_dt_seconds))
