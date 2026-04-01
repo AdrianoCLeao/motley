@@ -85,6 +85,11 @@ pub fn propagate_transforms(
         let node = nodes.get(&entity)?;
 
         if !visiting.insert(entity) {
+            log::warn!(
+                target: "engine::ecs",
+                "Cycle detected in transform hierarchy at entity {:?}; treating as root",
+                entity
+            );
             return Some(node.local);
         }
 
@@ -114,8 +119,9 @@ pub fn propagate_transforms(
     }
 
     let mut cache = HashMap::with_capacity(nodes.len());
+    let mut visiting = HashSet::with_capacity(nodes.len());
     for entity in nodes.keys().copied() {
-        let mut visiting = HashSet::new();
+        visiting.clear();
         let _ = resolve_global(entity, &nodes, &mut cache, &mut visiting);
     }
 

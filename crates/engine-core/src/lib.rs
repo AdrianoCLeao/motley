@@ -203,7 +203,7 @@ impl<M: EngineModules> Engine<M> {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
-        self.world.insert_resource(WindowSize::new(width, height));
+        self.insert_resource(WindowSize::new(width, height));
         self.modules.resized(width, height)
     }
 

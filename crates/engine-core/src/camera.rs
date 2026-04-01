@@ -1,3 +1,4 @@
+use bevy_ecs::change_detection::DetectChanges;
 use bevy_ecs::prelude::{Component, Query, Res, Resource};
 use engine_math::Mat4;
 
@@ -95,6 +96,10 @@ pub fn sync_camera_aspect_from_window(
     window_size: Res<WindowSize>,
     mut cameras: Query<&mut Camera3d>,
 ) {
+    if !window_size.is_changed() {
+        return;
+    }
+
     for mut camera in &mut cameras {
         camera.set_aspect_ratio_from_viewport(window_size.width, window_size.height);
     }
