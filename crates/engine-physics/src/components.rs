@@ -1,0 +1,100 @@
+use bevy_ecs::prelude::{Bundle, Component};
+use engine_core::{GlobalTransform, PhysicsControlled, Transform};
+use engine_math::Vec3;
+use rapier3d::prelude::{ColliderHandle, RigidBodyHandle};
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RigidBodyHandle3D(pub RigidBodyHandle);
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ColliderHandle3D(pub ColliderHandle);
+
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RigidBodyType {
+    #[default]
+    Dynamic,
+    Kinematic,
+    Static,
+}
+
+#[derive(Component, Clone, Debug)]
+pub enum ColliderShape3D {
+    Box { half_extents: Vec3 },
+    Sphere { radius: f32 },
+    Capsule { half_height: f32, radius: f32 },
+    Trimesh,
+}
+
+impl Default for ColliderShape3D {
+    fn default() -> Self {
+        Self::Box {
+            half_extents: Vec3::splat(0.5),
+        }
+    }
+}
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct PhysicsMaterial {
+    pub restitution: f32,
+    pub friction: f32,
+    pub density: f32,
+}
+
+impl Default for PhysicsMaterial {
+    fn default() -> Self {
+        Self {
+            restitution: 0.3,
+            friction: 0.7,
+            density: 1.0,
+        }
+    }
+}
+
+#[derive(Bundle)]
+pub struct RigidBody3DBundle {
+    pub body_type: RigidBodyType,
+    pub shape: ColliderShape3D,
+    pub material: PhysicsMaterial,
+    pub transform: Transform,
+    pub global_transform: GlobalTransform,
+    pub physics_controlled: PhysicsControlled,
+}
+
+impl Default for RigidBody3DBundle {
+    fn default() -> Self {
+        Self {
+            body_type: RigidBodyType::Dynamic,
+            shape: ColliderShape3D::default(),
+            material: PhysicsMaterial::default(),
+            transform: Transform::default(),
+            global_transform: GlobalTransform::default(),
+            physics_controlled: PhysicsControlled,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ColliderShape3D, PhysicsMaterial, RigidBody3DBundle, RigidBodyType};
+
+    #[test]
+    fn rigid_body_type_defaults_to_dynamic() {
+        assert_eq!(RigidBodyType::default(), RigidBodyType::Dynamic);
+    }
+
+    #[test]
+    fn physics_material_defaults_match_epic_spec() {
+        let material = PhysicsMaterial::default();
+
+        assert_eq!(material.restitution, 0.3);
+        assert_eq!(material.friction, 0.7);
+        assert_eq!(material.density, 1.0);
+    }
+
+    #[test]
+    fn default_bundle_uses_box_shape() {
+        let bundle = RigidBody3DBundle::default();
+
+        assert!(matches!(bundle.shape, ColliderShape3D::Box { .. }));
+    }
+}
