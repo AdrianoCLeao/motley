@@ -945,7 +945,9 @@ dependencies = [
 name = "engine-physics"
 version = "0.1.0"
 dependencies = [
+ "bevy_ecs",
  "engine-core",
+ "engine-math",
  "log",
  "rapier2d",
  "rapier3d",
