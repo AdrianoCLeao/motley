@@ -1,15 +1,25 @@
+pub mod camera;
 pub mod error;
+pub mod schedule;
+pub mod tag;
 pub mod time;
+pub mod transform;
 pub mod window;
 
+pub use camera::{sync_camera_aspect_from_window, Camera2d, Camera3d, PrimaryCamera, WindowSize};
 pub use error::{EngineError, Result};
+pub use schedule::{EngineSchedules, FixedUpdate, PreRender, Startup, Update};
+pub use tag::{Hidden, PhysicsControlled, RenderLayer2D, RenderLayer3D, Visible};
 pub use time::{
     FixedStepIterator, Time, TimeConfig, DEFAULT_FIXED_TIMESTEP_SECONDS,
     DEFAULT_FPS_AVERAGE_WINDOW_SAMPLES, DEFAULT_MAX_FRAME_TIME_SECONDS,
 };
+pub use transform::{
+    propagate_transforms, Children, GlobalTransform, Parent, SpatialBundle, Transform,
+};
 pub use window::{run_windowed, WindowConfig, WindowLoop};
 
-use bevy_ecs::world::World;
+use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::World};
 use std::sync::Once;
 
 static LOGGER_INIT: Once = Once::new();
@@ -113,22 +123,72 @@ pub struct Engine<M: EngineModules> {
     pub time: Time,
     pub modules: M,
     pub config: EngineConfig,
+    schedules: EngineSchedules,
+    startup_completed: bool,
 }
 
 impl<M: EngineModules> Engine<M> {
     pub fn new(config: EngineConfig, modules: M) -> Result<Self> {
         config.validate()?;
 
-        Ok(Self {
+        let window_size = WindowSize::new(config.window.width, config.window.height);
+
+        let mut engine = Self {
             world: create_world(),
             time: Time::with_config(config.time),
             modules,
             config,
-        })
+            schedules: EngineSchedules::new(),
+            startup_completed: false,
+        };
+
+        engine
+            .insert_resource(window_size)
+            .add_pre_render_systems(propagate_transforms)
+            .add_pre_render_systems(sync_camera_aspect_from_window);
+
+        Ok(engine)
     }
 
     pub fn add_plugin<P: Plugin<M>>(&mut self, plugin: P) -> &mut Self {
         plugin.build(self);
+        self
+    }
+
+    pub fn insert_resource<R: Resource>(&mut self, resource: R) -> &mut Self {
+        self.world.insert_resource(resource);
+        self
+    }
+
+    pub fn add_startup_systems<Marker>(
+        &mut self,
+        systems: impl IntoSystemConfigs<Marker>,
+    ) -> &mut Self {
+        self.schedules.startup.add_systems(systems);
+        self
+    }
+
+    pub fn add_fixed_update_systems<Marker>(
+        &mut self,
+        systems: impl IntoSystemConfigs<Marker>,
+    ) -> &mut Self {
+        self.schedules.fixed_update.add_systems(systems);
+        self
+    }
+
+    pub fn add_update_systems<Marker>(
+        &mut self,
+        systems: impl IntoSystemConfigs<Marker>,
+    ) -> &mut Self {
+        self.schedules.update.add_systems(systems);
+        self
+    }
+
+    pub fn add_pre_render_systems<Marker>(
+        &mut self,
+        systems: impl IntoSystemConfigs<Marker>,
+    ) -> &mut Self {
+        self.schedules.pre_render.add_systems(systems);
         self
     }
 
@@ -143,6 +203,7 @@ impl<M: EngineModules> Engine<M> {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+        self.world.insert_resource(WindowSize::new(width, height));
         self.modules.resized(width, height)
     }
 
@@ -181,13 +242,22 @@ impl<M: EngineModules> Engine<M> {
     }
 
     fn run_frame(&mut self) -> Result<FrameStats> {
+        if !self.startup_completed {
+            self.schedules.startup.run(&mut self.world);
+            self.startup_completed = true;
+        }
+
         self.modules.flush_input()?;
 
         for fixed_dt in self.time.fixed_steps() {
+            self.schedules.fixed_update.run(&mut self.world);
             self.modules.fixed_update(fixed_dt)?;
         }
 
+        self.schedules.update.run(&mut self.world);
         self.modules.update(self.time.delta_seconds())?;
+
+        self.schedules.pre_render.run(&mut self.world);
         self.modules.render(self.time.alpha())?;
 
         Ok(self.frame_stats())
@@ -228,6 +298,75 @@ pub fn create_world() -> World {
 #[cfg(test)]
 mod tests {
     use super::{Engine, EngineConfig, EngineModules, Plugin, TimeConfig, WindowConfig};
+    use bevy_ecs::prelude::{Changed, Commands, Component, Query, ResMut, Resource};
+
+    #[derive(Resource, Default)]
+    struct EcsCounters {
+        startup_runs: u32,
+        fixed_runs: u32,
+        update_runs: u32,
+        pre_render_runs: u32,
+        changed_runs: u32,
+    }
+
+    #[derive(Resource, Default)]
+    struct EcsTrace {
+        events: Vec<&'static str>,
+    }
+
+    #[derive(Component)]
+    struct ProbeTransform {
+        value: f32,
+    }
+
+    fn count_startup(mut counters: ResMut<EcsCounters>) {
+        counters.startup_runs += 1;
+    }
+
+    fn count_fixed(mut counters: ResMut<EcsCounters>) {
+        counters.fixed_runs += 1;
+    }
+
+    fn count_update(mut counters: ResMut<EcsCounters>) {
+        counters.update_runs += 1;
+    }
+
+    fn count_pre_render(mut counters: ResMut<EcsCounters>) {
+        counters.pre_render_runs += 1;
+    }
+
+    fn trace_startup(mut trace: ResMut<EcsTrace>) {
+        trace.events.push("startup");
+    }
+
+    fn trace_fixed(mut trace: ResMut<EcsTrace>) {
+        trace.events.push("fixed");
+    }
+
+    fn trace_update(mut trace: ResMut<EcsTrace>) {
+        trace.events.push("update");
+    }
+
+    fn trace_pre_render(mut trace: ResMut<EcsTrace>) {
+        trace.events.push("pre_render");
+    }
+
+    fn spawn_probe(mut commands: Commands) {
+        commands.spawn(ProbeTransform { value: 0.0 });
+    }
+
+    fn mutate_probe(mut probes: Query<&mut ProbeTransform>) {
+        for mut probe in &mut probes {
+            probe.value += 1.0;
+        }
+    }
+
+    fn count_changed_probe(
+        probes: Query<&ProbeTransform, Changed<ProbeTransform>>,
+        mut counters: ResMut<EcsCounters>,
+    ) {
+        counters.changed_runs += probes.iter().count() as u32;
+    }
 
     #[derive(Default)]
     struct MockModules {
@@ -390,5 +529,122 @@ mod tests {
         assert!((resumed_stats.delta_seconds - 0.05).abs() < 1e-6);
         assert!((resumed_stats.elapsed_seconds - 0.30).abs() < 1e-6);
         assert_eq!(resumed_stats.frame_count, 2);
+    }
+
+    #[test]
+    fn ecs_schedules_run_with_expected_frequency_and_startup_runs_once() {
+        let mut engine = Engine::new(
+            EngineConfig {
+                app_name: "Schedules".to_owned(),
+                window: WindowConfig::default(),
+                time: TimeConfig {
+                    fixed_timestep_seconds: 0.1,
+                    max_frame_time_seconds: 1.0,
+                    fps_average_window_samples: 8,
+                },
+            },
+            MockModules::default(),
+        )
+        .expect("engine should be created");
+
+        engine
+            .insert_resource(EcsCounters::default())
+            .add_startup_systems(count_startup)
+            .add_fixed_update_systems(count_fixed)
+            .add_update_systems(count_update)
+            .add_pre_render_systems(count_pre_render);
+
+        engine
+            .tick_with_frame_time(0.25)
+            .expect("first tick should succeed");
+
+        {
+            let counters = engine.world.resource::<EcsCounters>();
+            assert_eq!(counters.startup_runs, 1);
+            assert_eq!(counters.fixed_runs, 2);
+            assert_eq!(counters.update_runs, 1);
+            assert_eq!(counters.pre_render_runs, 1);
+        }
+
+        engine
+            .tick_with_frame_time(0.25)
+            .expect("second tick should succeed");
+
+        let counters = engine.world.resource::<EcsCounters>();
+        assert_eq!(counters.startup_runs, 1);
+        assert_eq!(counters.fixed_runs, 4);
+        assert_eq!(counters.update_runs, 2);
+        assert_eq!(counters.pre_render_runs, 2);
+    }
+
+    #[test]
+    fn ecs_schedule_order_is_startup_then_fixed_then_update_then_pre_render() {
+        let mut engine = Engine::new(
+            EngineConfig {
+                app_name: "Order".to_owned(),
+                window: WindowConfig::default(),
+                time: TimeConfig {
+                    fixed_timestep_seconds: 0.1,
+                    max_frame_time_seconds: 1.0,
+                    fps_average_window_samples: 8,
+                },
+            },
+            MockModules::default(),
+        )
+        .expect("engine should be created");
+
+        engine
+            .insert_resource(EcsTrace::default())
+            .add_startup_systems(trace_startup)
+            .add_fixed_update_systems(trace_fixed)
+            .add_update_systems(trace_update)
+            .add_pre_render_systems(trace_pre_render);
+
+        engine
+            .tick_with_frame_time(0.1)
+            .expect("tick should succeed");
+
+        let trace = engine.world.resource::<EcsTrace>();
+        assert_eq!(
+            trace.events,
+            vec!["startup", "fixed", "update", "pre_render"]
+        );
+    }
+
+    #[test]
+    fn ecs_changed_detection_observes_transform_mutations_across_frames() {
+        let mut engine = Engine::new(
+            EngineConfig {
+                app_name: "Changed".to_owned(),
+                window: WindowConfig::default(),
+                time: TimeConfig {
+                    fixed_timestep_seconds: 0.1,
+                    max_frame_time_seconds: 1.0,
+                    fps_average_window_samples: 8,
+                },
+            },
+            MockModules::default(),
+        )
+        .expect("engine should be created");
+
+        engine
+            .insert_resource(EcsCounters::default())
+            .add_startup_systems(spawn_probe)
+            .add_update_systems(mutate_probe)
+            .add_pre_render_systems(count_changed_probe);
+
+        engine
+            .tick_with_frame_time(0.016)
+            .expect("first tick should succeed");
+        engine
+            .tick_with_frame_time(0.016)
+            .expect("second tick should succeed");
+
+        let counters = engine.world.resource::<EcsCounters>();
+        assert!(
+            counters.changed_runs >= 2,
+            "expected changed runs >= 2, got {}",
+            counters.changed_runs
+        );
     }
 }
