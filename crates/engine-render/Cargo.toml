@@ -6,6 +6,12 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+bevy_ecs.workspace = true
+bytemuck.workspace = true
+engine-assets = { path = "../engine-assets" }
 engine-core = { path = "../engine-core" }
+engine-math = { path = "../engine-math" }
 log.workspace = true
+pollster = "0.3"
 wgpu.workspace = true
+winit.workspace = true
