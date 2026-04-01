@@ -1,14 +1,21 @@
-use engine_core::{EngineError, Result};
-use image::GenericImageView;
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use engine_core::{HardeningConfig, Result};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     marker::PhantomData,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    sync::mpsc::{self, Receiver, TryRecvError},
+    sync::mpsc::{Receiver, TryRecvError},
 };
+
+use hot_reload::{build_hot_reload_watcher, is_hot_reload_event};
+use loaders::{load_mesh_payload, load_texture_payload};
+use pathing::{normalize_disk_path, resolve_disk_path as resolve_asset_disk_path, to_asset_path};
+
+mod hot_reload;
+mod loaders;
+mod pathing;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AssetPath(String);
@@ -166,6 +173,7 @@ pub struct MaterialData {
 
 pub struct AssetServer {
     root: AssetPath,
+    hardening: HardeningConfig,
     next_id: AtomicU64,
     next_texture_revision: u64,
     textures: HandleRegistry,
@@ -185,6 +193,7 @@ impl AssetServer {
 
         Self {
             root: AssetPath::new(root),
+            hardening: HardeningConfig::default(),
             next_id: AtomicU64::new(1),
             next_texture_revision: 1,
             textures: HandleRegistry::default(),
@@ -203,21 +212,17 @@ impl AssetServer {
         &self.root
     }
 
+    pub fn configure_hardening(&mut self, hardening: HardeningConfig) {
+        self.hardening = hardening;
+    }
+
     pub fn resolve_path(&self, relative_path: &str) -> Result<AssetPath> {
         let disk_path = self.resolve_disk_path(relative_path)?;
         Ok(to_asset_path(&disk_path))
     }
 
     fn resolve_disk_path(&self, relative_path: &str) -> Result<PathBuf> {
-        if relative_path.trim().is_empty() {
-            return Err(EngineError::AssetLoad {
-                path: relative_path.to_owned(),
-                reason: "path cannot be empty".to_owned(),
-            });
-        }
-
-        let path = Path::new(self.root.as_str()).join(relative_path);
-        Ok(normalize_disk_path(&path))
+        resolve_asset_disk_path(&self.root, relative_path)
     }
 
     pub fn load_texture_handle(&mut self, relative_path: &str) -> Result<TextureHandle> {
@@ -225,7 +230,7 @@ impl AssetServer {
         let path = to_asset_path(&disk_path);
         let handle = self.textures.get_or_create(path.clone(), &self.next_id);
 
-        match load_texture_payload(&disk_path) {
+        match load_texture_payload(&disk_path, &self.hardening) {
             Ok(mut payload) => {
                 payload.revision = self.allocate_texture_revision();
                 self.texture_payloads.insert(handle.id(), payload);
@@ -234,6 +239,12 @@ impl AssetServer {
             }
             Err(error) => {
                 self.textures.mark_failed(handle);
+                log::warn!(
+                    target: "engine::assets",
+                    "skipping texture load {}: {}",
+                    disk_path.display(),
+                    error
+                );
                 return Err(error);
             }
         }
@@ -252,13 +263,19 @@ impl AssetServer {
         let path = to_asset_path(&disk_path);
         let handle = self.meshes.get_or_create(path.clone(), &self.next_id);
 
-        match load_mesh_payload(&disk_path) {
+        match load_mesh_payload(&disk_path, &self.hardening) {
             Ok(payload) => {
                 self.mesh_payloads.insert(handle.id(), payload);
                 self.meshes.mark_loaded(handle);
             }
             Err(error) => {
                 self.meshes.mark_failed(handle);
+                log::warn!(
+                    target: "engine::assets",
+                    "skipping mesh load {}: {}",
+                    disk_path.display(),
+                    error
+                );
                 return Err(error);
             }
         }
@@ -352,7 +369,7 @@ impl AssetServer {
                 continue;
             };
 
-            match load_texture_payload(&file_path) {
+            match load_texture_payload(&file_path, &self.hardening) {
                 Ok(mut payload) => {
                     payload.revision = self.allocate_texture_revision();
                     self.texture_payloads.insert(handle.id(), payload);
@@ -422,6 +439,10 @@ impl AssetModule {
         Ok(path)
     }
 
+    pub fn configure_hardening(&mut self, hardening: HardeningConfig) {
+        self.server.configure_hardening(hardening);
+    }
+
     pub fn load_texture_handle(&mut self, relative_path: &str) -> Result<TextureHandle> {
         self.server.load_texture_handle(relative_path)
     }
@@ -453,140 +474,4 @@ impl AssetModule {
 
 pub fn module_name() -> &'static str {
     "engine-assets"
-}
-
-fn load_texture_payload(path: &Path) -> Result<TextureData> {
-    let image = image::open(path).map_err(|error| EngineError::AssetLoad {
-        path: path.display().to_string(),
-        reason: error.to_string(),
-    })?;
-
-    let (width, height) = image.dimensions();
-    let pixels_rgba8 = image.to_rgba8().into_raw();
-
-    Ok(TextureData {
-        width,
-        height,
-        pixels_rgba8,
-        revision: 0,
-    })
-}
-
-fn load_mesh_payload(path: &Path) -> Result<MeshData> {
-    let (document, buffers, _images) =
-        gltf::import(path).map_err(|error| EngineError::AssetLoad {
-            path: path.display().to_string(),
-            reason: error.to_string(),
-        })?;
-
-    let mut mesh_name = None;
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
-
-    for mesh in document.meshes() {
-        if mesh_name.is_none() {
-            mesh_name = mesh.name().map(str::to_owned);
-        }
-
-        for primitive in mesh.primitives() {
-            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-            let positions: Vec<[f32; 3]> = reader
-                .read_positions()
-                .ok_or_else(|| EngineError::AssetLoad {
-                    path: path.display().to_string(),
-                    reason: "gltf primitive is missing POSITION attribute".to_owned(),
-                })?
-                .collect();
-
-            let normals: Vec<[f32; 3]> = reader
-                .read_normals()
-                .map(|iter| iter.collect())
-                .unwrap_or_else(|| vec![[0.0, 1.0, 0.0]; positions.len()]);
-            let uvs: Vec<[f32; 2]> = reader
-                .read_tex_coords(0)
-                .map(|iter| iter.into_f32().collect())
-                .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
-
-            if normals.len() != positions.len() || uvs.len() != positions.len() {
-                return Err(EngineError::AssetLoad {
-                    path: path.display().to_string(),
-                    reason: "gltf vertex attribute lengths do not match".to_owned(),
-                });
-            }
-
-            let base_index = u32::try_from(vertices.len()).map_err(|_| EngineError::AssetLoad {
-                path: path.display().to_string(),
-                reason: "mesh has too many vertices for u32 index buffer".to_owned(),
-            })?;
-            let primitive_vertex_count =
-                u32::try_from(positions.len()).map_err(|_| EngineError::AssetLoad {
-                    path: path.display().to_string(),
-                    reason: "primitive vertex count overflow".to_owned(),
-                })?;
-
-            for ((position, normal), uv) in positions.into_iter().zip(normals).zip(uvs) {
-                vertices.push(MeshVertex {
-                    position,
-                    normal,
-                    uv,
-                });
-            }
-
-            if let Some(read_indices) = reader.read_indices() {
-                indices.extend(read_indices.into_u32().map(|index| base_index + index));
-            } else {
-                indices.extend((0..primitive_vertex_count).map(|index| base_index + index));
-            }
-        }
-    }
-
-    if vertices.is_empty() {
-        return Err(EngineError::AssetLoad {
-            path: path.display().to_string(),
-            reason: "gltf file contains no renderable primitives".to_owned(),
-        });
-    }
-
-    let fallback_name = path
-        .file_stem()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "unnamed-mesh".to_owned());
-
-    Ok(MeshData {
-        name: mesh_name.unwrap_or(fallback_name),
-        vertices,
-        indices,
-    })
-}
-
-fn build_hot_reload_watcher() -> (
-    Option<RecommendedWatcher>,
-    Option<Receiver<notify::Result<notify::Event>>>,
-) {
-    let (tx, rx) = mpsc::channel();
-    match notify::recommended_watcher(move |event| {
-        let _ = tx.send(event);
-    }) {
-        Ok(watcher) => (Some(watcher), Some(rx)),
-        Err(error) => {
-            log::warn!(
-                target: "engine::assets",
-                "texture hot-reload watcher unavailable: {}",
-                error
-            );
-            (None, None)
-        }
-    }
-}
-
-fn is_hot_reload_event(kind: &EventKind) -> bool {
-    matches!(kind, EventKind::Modify(_) | EventKind::Create(_))
-}
-
-fn normalize_disk_path(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn to_asset_path(path: &Path) -> AssetPath {
-    AssetPath::new(path.to_string_lossy().replace('\\', "/"))
 }
