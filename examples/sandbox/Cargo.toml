@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+bevy_ecs.workspace = true
 engine-assets = { path = "../../crates/engine-assets" }
 engine-audio = { path = "../../crates/engine-audio" }
 engine-core = { path = "../../crates/engine-core" }

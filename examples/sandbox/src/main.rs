@@ -1,9 +1,77 @@
+use bevy_ecs::prelude::{Commands, Query, With};
 use engine_assets::AssetModule;
 use engine_audio::AudioModule;
-use engine_core::{self, Engine, EngineConfig, EngineModules, Plugin, Result, WindowConfig};
+use engine_core::{
+    self, Camera3d, Children, Engine, EngineConfig, EngineModules, Parent, Plugin, PrimaryCamera,
+    RenderLayer3D, Result, SpatialBundle, Transform, Visible, WindowConfig,
+};
 use engine_input::InputModule;
 use engine_physics::PhysicsModule;
 use engine_render::RenderModule;
+use std::sync::Once;
+
+static ECS_UPDATE_LOG_ONCE: Once = Once::new();
+
+fn ecs_startup_smoke() {
+    log::info!(target: "engine::sandbox", "ECS Startup schedule executed");
+}
+
+fn ecs_spawn_smoke_entities(mut commands: Commands) {
+    let parent = commands
+        .spawn((
+            SpatialBundle {
+                transform: Transform::from_xyz(0.0, 1.0, 0.0),
+                ..SpatialBundle::default()
+            },
+            Children::default(),
+            Visible,
+            RenderLayer3D,
+        ))
+        .id();
+
+    let child = commands
+        .spawn((
+            SpatialBundle {
+                transform: Transform::from_xyz(1.0, 0.0, 0.0),
+                ..SpatialBundle::default()
+            },
+            Parent(parent),
+            Visible,
+            RenderLayer3D,
+        ))
+        .id();
+
+    commands.entity(parent).insert(Children(vec![child]));
+
+    commands.spawn((
+        SpatialBundle::default(),
+        Camera3d::default(),
+        PrimaryCamera,
+        Visible,
+    ));
+
+    log::info!(
+        target: "engine::sandbox",
+        "ECS smoke entities spawned (hierarchy + camera)"
+    );
+}
+
+fn ecs_update_smoke(
+    primary_cameras: Query<(), With<PrimaryCamera>>,
+    parented_entities: Query<(), With<Parent>>,
+) {
+    ECS_UPDATE_LOG_ONCE.call_once(|| {
+        let camera_count = primary_cameras.iter().count();
+        let parented_count = parented_entities.iter().count();
+
+        log::info!(
+            target: "engine::sandbox",
+            "ECS Update schedule executed (primary_cameras={}, parented_entities={})",
+            camera_count,
+            parented_count
+        );
+    });
+}
 
 struct SandboxModules {
     renderer: RenderModule,
@@ -51,6 +119,11 @@ struct SandboxBootstrapPlugin;
 impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
     fn build(&self, engine: &mut Engine<SandboxModules>) {
         let _identity = engine_math::identity();
+
+        engine
+            .add_startup_systems(ecs_startup_smoke)
+            .add_startup_systems(ecs_spawn_smoke_entities)
+            .add_update_systems(ecs_update_smoke);
 
         log::info!(target: "engine::sandbox", "Engine: {}", engine_core::engine_name());
         log::info!(
