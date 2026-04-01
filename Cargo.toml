@@ -25,7 +25,7 @@ winit = { version = "0.30" }
 glam = { version = "0.29", features = ["serde"] }
 rapier3d = { version = "0.22" }
 rapier2d = { version = "0.22" }
-kira = { version = "0.9" }
+kira = { version = "0.9", default-features = false, features = ["cpal", "ogg", "wav", "mp3"] }
 cpal = { version = "0.15" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 gltf = { version = "1.4" }

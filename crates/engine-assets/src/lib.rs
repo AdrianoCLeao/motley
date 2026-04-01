@@ -447,7 +447,7 @@ impl AssetModule {
     }
 
     pub fn supported_formats() -> &'static [&'static str] {
-        &["png", "jpeg", "gltf", "glb", "ron"]
+        &["png", "jpeg", "gltf", "glb", "ron", "ogg", "wav", "mp3"]
     }
 }
 
