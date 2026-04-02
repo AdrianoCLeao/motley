@@ -5,8 +5,8 @@ use engine_reflect::{
 };
 
 use crate::{
-    Camera2d, Camera3d, Hidden, PhysicsControlled, PrimaryCamera, RenderLayer2D, RenderLayer3D,
-    Transform, Visible, WindowSize,
+    Camera2d, Camera3d, EntityName, Hidden, PhysicsControlled, PrimaryCamera, RenderLayer2D,
+    RenderLayer3D, Transform, Visible, WindowSize,
 };
 
 pub fn register_core_reflection_types(
@@ -17,6 +17,7 @@ pub fn register_core_reflection_types(
     type_registry.register::<WindowSize>();
 
     register_component::<Transform>(type_registry, component_registry, metadata_registry);
+    register_component::<EntityName>(type_registry, component_registry, metadata_registry);
     register_component::<Camera3d>(type_registry, component_registry, metadata_registry);
     register_component::<Camera2d>(type_registry, component_registry, metadata_registry);
     register_component::<PrimaryCamera>(type_registry, component_registry, metadata_registry);

@@ -56,8 +56,36 @@ pub struct Parent(pub Entity);
 #[derive(Component, Clone, Debug, Default)]
 pub struct Children(pub Vec<Entity>);
 
+#[derive(Component, Clone, Debug, Reflect, engine_reflect::RegisterReflect, PartialEq, Eq)]
+pub struct EntityName(pub String);
+
+impl EntityName {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+}
+
+impl std::fmt::Display for EntityName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Default for EntityName {
+    fn default() -> Self {
+        Self("Entity".to_owned())
+    }
+}
+
 #[derive(Bundle, Default)]
 pub struct SpatialBundle {
+    pub transform: Transform,
+    pub global_transform: GlobalTransform,
+}
+
+#[derive(Bundle, Default)]
+pub struct EditorEntityBundle {
+    pub name: EntityName,
     pub transform: Transform,
     pub global_transform: GlobalTransform,
 }

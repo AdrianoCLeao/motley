@@ -19,7 +19,8 @@ pub use time::{
     DEFAULT_FPS_AVERAGE_WINDOW_SAMPLES, DEFAULT_MAX_FRAME_TIME_SECONDS,
 };
 pub use transform::{
-    propagate_transforms, Children, GlobalTransform, Parent, SpatialBundle, Transform,
+    propagate_transforms, Children, EditorEntityBundle, EntityName, GlobalTransform, Parent,
+    SpatialBundle, Transform,
 };
 pub use window::{run_windowed, WindowConfig, WindowLoop};
 pub use winit::event::WindowEvent;
