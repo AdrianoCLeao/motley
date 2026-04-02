@@ -936,7 +936,10 @@ name = "engine-assets"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "engine-core",
+ "engine-physics",
+ "engine-reflect",
  "gltf",
  "image",
  "log",
@@ -1032,6 +1035,7 @@ dependencies = [
  "engine-math",
  "log",
  "pollster",
+ "ron",
  "wgpu",
  "winit",
 ]
