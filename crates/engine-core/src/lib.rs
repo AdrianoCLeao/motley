@@ -1,6 +1,7 @@
 pub mod camera;
 pub mod error;
 pub mod hardening;
+pub mod reflect;
 pub mod schedule;
 pub mod tag;
 pub mod time;
@@ -10,6 +11,7 @@ pub mod window;
 pub use camera::{sync_camera_aspect_from_window, Camera2d, Camera3d, PrimaryCamera, WindowSize};
 pub use error::{EngineError, Result};
 pub use hardening::HardeningConfig;
+pub use reflect::register_core_reflection_types;
 pub use schedule::{EngineSchedules, FixedUpdate, PreRender, Startup, Update};
 pub use tag::{Hidden, PhysicsControlled, RenderLayer2D, RenderLayer3D, Visible};
 pub use time::{
@@ -181,7 +183,19 @@ impl<M: EngineModules> Engine<M> {
             startup_completed: false,
         };
 
+        let mut reflect_type_registry = engine_reflect::ReflectTypeRegistry::default();
+        let mut component_registry = engine_reflect::ComponentRegistry::default();
+        let mut metadata_registry = engine_reflect::ReflectMetadataRegistry::default();
+        register_core_reflection_types(
+            &mut reflect_type_registry,
+            &mut component_registry,
+            &mut metadata_registry,
+        );
+
         engine
+            .insert_resource(reflect_type_registry)
+            .insert_resource(component_registry)
+            .insert_resource(metadata_registry)
             .insert_resource(window_size)
             .insert_resource(FrameTime::default())
             .insert_resource(HardeningConfig::default())

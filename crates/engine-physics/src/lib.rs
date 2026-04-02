@@ -1,6 +1,7 @@
 pub mod components;
 pub mod mapping;
 pub mod query;
+pub mod reflect;
 pub mod systems;
 pub mod world3d;
 
@@ -10,6 +11,7 @@ pub use components::{
 };
 pub use mapping::{ColliderEntityMap3D, PhysicsEntityHandles3D};
 pub use query::{raycast, RaycastHit};
+pub use reflect::register_physics_reflection_types;
 pub use systems::{
     cleanup_orphaned_bodies, physics_fixed_update_systems_3d, step_physics_world,
     sync_kinematic_bodies_from_transforms, sync_new_bodies, write_back_transforms,

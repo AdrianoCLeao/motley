@@ -7,7 +7,9 @@ license.workspace = true
 
 [dependencies]
 bevy_ecs = { workspace = true, features = ["multi_threaded"] }
+bevy_reflect.workspace = true
 engine-math = { path = "../engine-math" }
+engine-reflect = { path = "../engine-reflect" }
 env_logger.workspace = true
 log.workspace = true
 thiserror.workspace = true

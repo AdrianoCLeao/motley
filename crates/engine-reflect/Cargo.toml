@@ -1,5 +1,5 @@
 [package]
-name = "engine-physics"
+name = "engine-reflect"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,9 +8,7 @@ license.workspace = true
 [dependencies]
 bevy_ecs.workspace = true
 bevy_reflect.workspace = true
-engine-core = { path = "../engine-core" }
-engine-reflect = { path = "../engine-reflect" }
+engine-reflect-derive = { path = "../engine-reflect-derive" }
+
+[dev-dependencies]
 engine-math = { path = "../engine-math" }
-log.workspace = true
-rapier2d.workspace = true
-rapier3d.workspace = true
