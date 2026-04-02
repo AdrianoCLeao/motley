@@ -25,12 +25,17 @@ mod gpu_resources;
 #[cfg(test)]
 mod gpu_resources_tests;
 mod pipelines;
+mod scene_adapter;
+#[cfg(test)]
+mod scene_adapter_tests;
 mod surface;
 #[cfg(test)]
 mod surface_tests;
 mod texture_upload;
 #[cfg(test)]
 mod texture_upload_tests;
+
+pub use scene_adapter::RenderSceneAdapter;
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct MeshRenderable3d {
