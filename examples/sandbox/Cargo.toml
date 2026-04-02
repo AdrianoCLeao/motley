@@ -13,6 +13,7 @@ engine-core = { path = "../../crates/engine-core" }
 engine-input = { path = "../../crates/engine-input" }
 engine-math = { path = "../../crates/engine-math" }
 engine-physics = { path = "../../crates/engine-physics" }
+engine-reflect = { path = "../../crates/engine-reflect" }
 engine-render = { path = "../../crates/engine-render" }
 gilrs.workspace = true
 log.workspace = true
