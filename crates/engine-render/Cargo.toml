@@ -13,5 +13,6 @@ engine-core = { path = "../engine-core" }
 engine-math = { path = "../engine-math" }
 log.workspace = true
 pollster = "0.3"
+ron.workspace = true
 wgpu.workspace = true
 winit.workspace = true
