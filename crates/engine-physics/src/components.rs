@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::{Bundle, Component};
+use bevy_reflect::Reflect;
 use engine_core::{GlobalTransform, PhysicsControlled, Transform};
 use engine_math::Vec3;
 use rapier3d::prelude::{ColliderHandle, RigidBodyHandle};
@@ -9,7 +10,9 @@ pub struct RigidBodyHandle3D(pub RigidBodyHandle);
 #[derive(Component, Clone, Copy, Debug)]
 pub struct ColliderHandle3D(pub ColliderHandle);
 
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Component, Clone, Copy, Debug, Default, PartialEq, Eq, Reflect, engine_reflect::RegisterReflect,
+)]
 pub enum RigidBodyType {
     #[default]
     Dynamic,
@@ -17,7 +20,7 @@ pub enum RigidBodyType {
     Static,
 }
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Reflect, engine_reflect::RegisterReflect)]
 pub enum ColliderShape3D {
     Box { half_extents: Vec3 },
     Sphere { radius: f32 },
@@ -33,10 +36,13 @@ impl Default for ColliderShape3D {
     }
 }
 
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, Reflect, engine_reflect::RegisterReflect)]
 pub struct PhysicsMaterial {
+    #[engine_reflect(range(min = 0.0, max = 1.0))]
     pub restitution: f32,
+    #[engine_reflect(range(min = 0.0, max = 1.0))]
     pub friction: f32,
+    #[engine_reflect(range(min = 0.001, max = 10000.0))]
     pub density: f32,
 }
 

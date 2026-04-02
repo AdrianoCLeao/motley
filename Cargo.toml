@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/engine-reflect",
+    "crates/engine-reflect-derive",
     "crates/engine-core",
     "crates/engine-render",
     "crates/engine-physics",
@@ -19,6 +21,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 bevy_ecs = { version = "0.15", default-features = false }
+bevy_reflect = { version = "0.15", features = ["glam"] }
 bytemuck = { version = "1.19", features = ["derive"] }
 wgpu = { version = "22", default-features = false, features = ["wgsl", "dx12", "metal", "webgpu"] }
 winit = { version = "0.30" }

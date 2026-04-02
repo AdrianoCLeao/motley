@@ -346,3 +346,53 @@ fn ecs_changed_detection_observes_transform_mutations_across_frames() {
         counters.changed_runs
     );
 }
+
+#[test]
+fn engine_bootstraps_reflection_registries_with_core_components() {
+    let mut engine = Engine::new(EngineConfig::default(), MockModules::default()).expect("engine");
+
+    let type_registry = engine
+        .world
+        .resource::<engine_reflect::ReflectTypeRegistry>();
+    assert!(type_registry.contains::<super::Transform>());
+    assert!(type_registry.contains::<super::Camera3d>());
+
+    let component_registry = engine.world.resource::<engine_reflect::ComponentRegistry>();
+    assert!(component_registry
+        .by_name(std::any::type_name::<super::Transform>())
+        .is_some());
+    assert!(component_registry
+        .by_name(std::any::type_name::<super::Camera3d>())
+        .is_some());
+
+    let metadata_registry = engine
+        .world
+        .resource::<engine_reflect::ReflectMetadataRegistry>();
+    assert_eq!(
+        metadata_registry.hint_for::<super::Transform>("scale"),
+        Some(engine_reflect::EditorHint::Range {
+            min: 0.001,
+            max: 100.0,
+        })
+    );
+
+    let entity = engine.world.spawn(super::Transform::default()).id();
+    let component_registry = engine.world.resource::<engine_reflect::ComponentRegistry>();
+    let descriptor = component_registry
+        .by_name(std::any::type_name::<super::Transform>())
+        .expect("transform descriptor should exist");
+    let reflected = descriptor
+        .get_reflect(entity, &engine.world)
+        .expect("entity should expose reflected transform");
+    assert!(engine_reflect::reflect_field(reflected, "translation").is_some());
+
+    let mut transform = super::Transform::default();
+    let Some(field) = engine_reflect::reflect_field_mut(&mut transform, "translation") else {
+        panic!("translation field should be mutable through reflection");
+    };
+    let translation = field
+        .try_downcast_mut::<engine_math::Vec3>()
+        .expect("translation field should be Vec3");
+    translation.x = 5.0;
+    assert!((transform.translation.x - 5.0).abs() < f32::EPSILON);
+}

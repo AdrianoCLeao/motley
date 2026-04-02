@@ -10,9 +10,11 @@ use engine_core::{
 use engine_input::{InputModule, InputState};
 use engine_math::{glam::EulerRot, Quat, Vec2, Vec3};
 use engine_physics::{
-    physics_fixed_update_systems_3d, ColliderEntityMap3D, ColliderShape3D, PhysicsEntityHandles3D,
-    PhysicsStepConfig3D, PhysicsWorld3D, RigidBody3DBundle, RigidBodyType,
+    physics_fixed_update_systems_3d, register_physics_reflection_types, ColliderEntityMap3D,
+    ColliderShape3D, PhysicsEntityHandles3D, PhysicsStepConfig3D, PhysicsWorld3D,
+    RigidBody3DBundle, RigidBodyType,
 };
+use engine_reflect::with_reflection_registries;
 use engine_render::{MeshRenderable3d, RenderModule};
 use gilrs::{Axis, Button};
 use std::path::Path;
@@ -387,6 +389,17 @@ impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
             .insert_resource(PhysicsEntityHandles3D::default())
             .insert_resource(InputState::default())
             .insert_resource(CameraLookState::default());
+
+        with_reflection_registries(
+            &mut engine.world,
+            |type_registry, component_registry, metadata_registry| {
+                register_physics_reflection_types(
+                    type_registry,
+                    component_registry,
+                    metadata_registry,
+                );
+            },
+        );
 
         match engine
             .modules

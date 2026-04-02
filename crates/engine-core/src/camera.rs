@@ -1,12 +1,18 @@
 use bevy_ecs::change_detection::DetectChanges;
 use bevy_ecs::prelude::{Component, Query, Res, Resource};
+use bevy_reflect::Reflect;
 use engine_math::Mat4;
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Reflect, engine_reflect::RegisterReflect)]
 pub struct Camera3d {
+    #[engine_reflect(degrees)]
+    #[engine_reflect(range(min = 0.08726646, max = 2.9670596))]
     pub fov_y_radians: f32,
+    #[engine_reflect(range(min = 0.001, max = 1000.0))]
     pub near: f32,
+    #[engine_reflect(range(min = 1.0, max = 10000.0))]
     pub far: f32,
+    #[engine_reflect(read_only)]
     pub aspect_ratio: f32,
 }
 
@@ -36,9 +42,11 @@ impl Camera3d {
     }
 }
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Reflect, engine_reflect::RegisterReflect)]
 pub struct Camera2d {
+    #[engine_reflect(range(min = 1.0, max = 10000.0))]
     pub viewport_width: f32,
+    #[engine_reflect(range(min = 1.0, max = 10000.0))]
     pub viewport_height: f32,
     pub near: f32,
     pub far: f32,
@@ -68,10 +76,10 @@ impl Camera2d {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, Default)]
+#[derive(Component, Debug, Clone, Copy, Default, Reflect, engine_reflect::RegisterReflect)]
 pub struct PrimaryCamera;
 
-#[derive(Resource, Debug, Clone, Copy)]
+#[derive(Resource, Debug, Clone, Copy, Reflect)]
 pub struct WindowSize {
     pub width: u32,
     pub height: u32,

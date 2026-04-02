@@ -1,10 +1,12 @@
 use bevy_ecs::prelude::{Bundle, Component, Entity, Query};
+use bevy_reflect::Reflect;
 use engine_math::glam::{Affine3A, Quat, Vec3};
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Reflect, engine_reflect::RegisterReflect)]
 pub struct Transform {
     pub translation: Vec3,
     pub rotation: Quat,
+    #[engine_reflect(range(min = 0.001, max = 100.0))]
     pub scale: Vec3,
 }
 
