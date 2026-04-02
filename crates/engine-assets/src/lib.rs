@@ -11,11 +11,20 @@ use std::{
 
 use hot_reload::{build_hot_reload_watcher, is_hot_reload_event};
 use loaders::{load_mesh_payload, load_texture_payload};
-use pathing::{normalize_disk_path, resolve_disk_path as resolve_asset_disk_path, to_asset_path};
+use pathing::{
+    normalize_disk_path, resolve_disk_path as resolve_asset_disk_path, to_asset_path,
+    to_relative_asset_path,
+};
 
 mod hot_reload;
 mod loaders;
 mod pathing;
+pub mod scene;
+
+pub use scene::{
+    SceneDeserializer, SceneEntityData, SceneExternalComponents, SceneFile, SceneSerializer,
+    SceneValue,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AssetPath(String);
@@ -72,6 +81,7 @@ struct HandleRecord {
 #[derive(Default)]
 struct HandleRegistry {
     path_to_id: HashMap<AssetPath, AssetId>,
+    id_to_path: HashMap<AssetId, AssetPath>,
     id_to_record: HashMap<AssetId, HandleRecord>,
 }
 
@@ -91,7 +101,8 @@ impl HandleRegistry {
         }
 
         let id = AssetId(id_source.fetch_add(1, Ordering::Relaxed));
-        self.path_to_id.insert(path, id);
+        self.path_to_id.insert(path.clone(), id);
+        self.id_to_path.insert(id, path);
         self.id_to_record.insert(
             id,
             HandleRecord {
@@ -113,6 +124,15 @@ impl HandleRegistry {
             return None;
         }
         Some(record.state)
+    }
+
+    fn path_for<T>(&self, handle: Handle<T>) -> Option<&AssetPath> {
+        let record = self.id_to_record.get(&handle.id)?;
+        if record.generation != handle.generation {
+            return None;
+        }
+
+        self.id_to_path.get(&handle.id)
     }
 
     fn mark_failed<T>(&mut self, handle: Handle<T>) {
@@ -321,6 +341,21 @@ impl AssetServer {
 
     pub fn material_state(&self, handle: MaterialHandle) -> Option<AssetState> {
         self.materials.state_for(handle)
+    }
+
+    pub fn texture_relative_path(&self, handle: TextureHandle) -> Option<String> {
+        let path = self.textures.path_for(handle)?;
+        to_relative_asset_path(&self.root, path)
+    }
+
+    pub fn mesh_relative_path(&self, handle: MeshHandle) -> Option<String> {
+        let path = self.meshes.path_for(handle)?;
+        to_relative_asset_path(&self.root, path)
+    }
+
+    pub fn material_relative_path(&self, handle: MaterialHandle) -> Option<String> {
+        let path = self.materials.path_for(handle)?;
+        to_relative_asset_path(&self.root, path)
     }
 
     pub fn mark_texture_failed(&mut self, handle: TextureHandle) {

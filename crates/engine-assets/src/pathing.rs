@@ -47,3 +47,23 @@ pub(crate) fn normalize_disk_path(path: &Path) -> PathBuf {
 pub(crate) fn to_asset_path(path: &Path) -> AssetPath {
     AssetPath::new(path.to_string_lossy().replace('\\', "/"))
 }
+
+pub(crate) fn to_relative_asset_path(root: &AssetPath, path: &AssetPath) -> Option<String> {
+    let root_path = Path::new(root.as_str());
+    let asset_path = Path::new(path.as_str());
+
+    if !asset_path.is_absolute() {
+        if let Ok(stripped) = asset_path.strip_prefix(root_path) {
+            let relative = stripped.to_string_lossy().replace('\\', "/");
+            return Some(relative.trim_start_matches('/').to_owned());
+        }
+
+        return Some(asset_path.to_string_lossy().replace('\\', "/"));
+    }
+
+    let normalized_root = normalize_disk_path(root_path);
+    let normalized_asset = normalize_disk_path(asset_path);
+    let stripped = normalized_asset.strip_prefix(&normalized_root).ok()?;
+    let relative = stripped.to_string_lossy().replace('\\', "/");
+    Some(relative.trim_start_matches('/').to_owned())
+}
