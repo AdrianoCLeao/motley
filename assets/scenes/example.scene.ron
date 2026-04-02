@@ -1,0 +1,47 @@
+(
+    version: 1,
+    name: "ExampleScene",
+    entities: [
+        (
+            name: Some("Main Camera"),
+            components: {
+                "Transform": {
+                    "translation": {"x": 0.0, "y": 4.0, "z": 10.0},
+                    "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                    "scale": {"x": 1.0, "y": 1.0, "z": 1.0},
+                },
+                "Camera3d": {
+                    "fov_y_radians": 0.7853982,
+                    "near": 0.1,
+                    "far": 1000.0,
+                    "aspect_ratio": 1.7777778,
+                },
+                "PrimaryCamera": {},
+            },
+            children: [],
+        ),
+        (
+            name: Some("Ground"),
+            components: {
+                "Transform": {
+                    "translation": {"x": 0.0, "y": -0.1, "z": 0.0},
+                    "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                    "scale": {"x": 1.0, "y": 1.0, "z": 1.0},
+                },
+                "RigidBodyType": "Static",
+                "ColliderShape3D": {
+                    "$variant": "Box",
+                    "$fields": {
+                        "half_extents": {"x": 12.0, "y": 0.1, "z": 12.0},
+                    },
+                },
+                "PhysicsMaterial": {
+                    "restitution": 0.2,
+                    "friction": 0.9,
+                    "density": 1.0,
+                },
+            },
+            children: [],
+        ),
+    ],
+)
