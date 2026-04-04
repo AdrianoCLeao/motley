@@ -152,6 +152,370 @@ impl RenderModule {
     }
 }
 
+pub struct ViewportRenderModule {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    width: u32,
+    height: u32,
+    clear_color: wgpu::Color,
+    depth_target: DepthTarget,
+    pipeline_3d: Pipeline3d,
+    pipeline_2d: Pipeline2d,
+    gpu_meshes: HashMap<AssetId, GpuMesh>,
+    gpu_textures: HashMap<AssetId, GpuTexture>,
+}
+
+impl ViewportRenderModule {
+    pub fn new(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        target_format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let width = width.max(1);
+        let height = height.max(1);
+
+        Self {
+            depth_target: create_depth_target(&device, width, height),
+            pipeline_3d: create_pipeline_3d(&device, target_format),
+            pipeline_2d: create_pipeline_2d(&device, target_format),
+            device,
+            queue,
+            width,
+            height,
+            clear_color: wgpu::Color {
+                r: 0.06,
+                g: 0.08,
+                b: 0.12,
+                a: 1.0,
+            },
+            gpu_meshes: HashMap::new(),
+            gpu_textures: HashMap::new(),
+        }
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        if self.width == width && self.height == height {
+            return;
+        }
+
+        self.width = width;
+        self.height = height;
+        self.depth_target = create_depth_target(&self.device, width, height);
+    }
+
+    pub fn render(
+        &mut self,
+        world: &mut World,
+        assets: &AssetServer,
+        target_view: &wgpu::TextureView,
+    ) -> Result<()> {
+        let hardening = world
+            .get_resource::<HardeningConfig>()
+            .copied()
+            .unwrap_or_default();
+
+        if let Some(camera_uniform) = extract_camera_uniform_3d(world) {
+            self.queue.write_buffer(
+                &self.pipeline_3d.camera_buffer,
+                0,
+                bytemuck::bytes_of(&camera_uniform),
+            );
+        }
+
+        let camera_2d_uniform = extract_camera_uniform_2d(world, self.width, self.height);
+        self.queue.write_buffer(
+            &self.pipeline_2d.camera_buffer,
+            0,
+            bytemuck::bytes_of(&camera_2d_uniform),
+        );
+
+        let draw_items_3d = collect_draw_items_3d(world, hardening.max_draw_items_3d.max(1));
+        for draw_item in &draw_items_3d {
+            self.ensure_gpu_mesh(draw_item.mesh, assets)?;
+            self.ensure_gpu_texture(draw_item.texture, assets)?;
+        }
+
+        let draw_items_2d = collect_draw_items_2d(world, hardening.max_draw_items_2d.max(1));
+        for draw_item in &draw_items_2d {
+            self.ensure_gpu_texture(draw_item.texture, assets)?;
+        }
+
+        let mut encoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("engine-render-viewport-encoder"),
+                });
+
+        {
+            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("engine-render-viewport-clear-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_target.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+        }
+
+        self.encode_3d_pass(&mut encoder, target_view, assets, &draw_items_3d);
+        self.encode_2d_pass(&mut encoder, target_view, &draw_items_2d);
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        Ok(())
+    }
+
+    fn encode_3d_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        assets: &AssetServer,
+        draw_items: &[DrawItem3d],
+    ) {
+        let fallback_material = MaterialData {
+            base_color_factor: [1.0, 1.0, 1.0, 1.0],
+            metallic: 0.0,
+            roughness: 1.0,
+        };
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("engine-render-viewport-3d-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_target.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        render_pass.set_pipeline(&self.pipeline_3d.pipeline);
+        render_pass.set_bind_group(0, &self.pipeline_3d.camera_bind_group, &[]);
+
+        let mut frame_model_buffers = Vec::with_capacity(draw_items.len());
+        let mut frame_material_buffers = Vec::with_capacity(draw_items.len());
+        let mut frame_model_bind_groups = Vec::with_capacity(draw_items.len());
+        let mut frame_material_bind_groups = Vec::with_capacity(draw_items.len());
+
+        for draw_item in draw_items {
+            let Some(gpu_mesh) = self.gpu_meshes.get(&draw_item.mesh.id()) else {
+                continue;
+            };
+            let Some(gpu_texture) = self.gpu_textures.get(&draw_item.texture.id()) else {
+                continue;
+            };
+
+            let material = assets
+                .material_payload(draw_item.material)
+                .unwrap_or(&fallback_material);
+
+            let model_uniform = ModelUniform {
+                model: draw_item.model,
+                normal: draw_item.normal,
+            };
+            let model_buffer =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("engine-render-model-uniform"),
+                        contents: bytemuck::bytes_of(&model_uniform),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
+            frame_model_buffers.push(model_buffer);
+            let model_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("engine-render-model-bind-group"),
+                layout: &self.pipeline_3d.model_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_model_buffers
+                        .last()
+                        .expect("model buffer inserted")
+                        .as_entire_binding(),
+                }],
+            });
+            frame_model_bind_groups.push(model_bind_group);
+
+            let material_uniform = MaterialUniform {
+                base_color: material.base_color_factor,
+                metallic_roughness: [material.metallic, material.roughness, 0.0, 0.0],
+            };
+            let material_buffer =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("engine-render-material-uniform"),
+                        contents: bytemuck::bytes_of(&material_uniform),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
+            frame_material_buffers.push(material_buffer);
+            let material_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("engine-render-material-bind-group"),
+                layout: &self.pipeline_3d.material_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: frame_material_buffers
+                            .last()
+                            .expect("material buffer inserted")
+                            .as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&gpu_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&gpu_texture.sampler),
+                    },
+                ],
+            });
+            frame_material_bind_groups.push(material_bind_group);
+
+            let model_bind_group = frame_model_bind_groups
+                .last()
+                .expect("model bind group inserted");
+            let material_bind_group = frame_material_bind_groups
+                .last()
+                .expect("material bind group inserted");
+
+            render_pass.set_bind_group(1, model_bind_group, &[]);
+            render_pass.set_bind_group(2, material_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..gpu_mesh.index_count, 0, 0..1);
+        }
+    }
+
+    fn encode_2d_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        draw_items: &[DrawItem2d],
+    ) {
+        if draw_items.is_empty() {
+            return;
+        }
+
+        let instances: Vec<SpriteInstance> = draw_items
+            .iter()
+            .map(|draw_item| SpriteInstance {
+                model: draw_item.model,
+                color: draw_item.color,
+                uv_rect: draw_item.uv_rect,
+            })
+            .collect();
+
+        let instance_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("engine-render-sprite-instance-buffer"),
+                    contents: bytemuck::cast_slice(instances.as_slice()),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("engine-render-viewport-2d-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        render_pass.set_pipeline(&self.pipeline_2d.pipeline);
+        render_pass.set_bind_group(0, &self.pipeline_2d.camera_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.pipeline_2d.quad_vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+        render_pass.set_index_buffer(
+            self.pipeline_2d.quad_index_buffer.slice(..),
+            wgpu::IndexFormat::Uint16,
+        );
+
+        let draw_batches = build_draw_batches_2d(draw_items);
+        let mut frame_sprite_bind_groups = Vec::with_capacity(draw_batches.len());
+
+        for batch in draw_batches {
+            let Some(gpu_texture) = self.gpu_textures.get(&batch.texture.id()) else {
+                continue;
+            };
+
+            let sprite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("engine-render-sprite-bind-group"),
+                layout: &self.pipeline_2d.sprite_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&gpu_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&gpu_texture.sampler),
+                    },
+                ],
+            });
+            frame_sprite_bind_groups.push(sprite_bind_group);
+
+            let bind_group = frame_sprite_bind_groups
+                .last()
+                .expect("sprite bind group inserted");
+            render_pass.set_bind_group(1, bind_group, &[]);
+            render_pass.draw_indexed(
+                0..self.pipeline_2d.quad_index_count,
+                0,
+                batch.start as u32..batch.end as u32,
+            );
+        }
+    }
+
+    fn ensure_gpu_mesh(&mut self, handle: MeshHandle, assets: &AssetServer) -> Result<()> {
+        gpu_resources::ensure_gpu_mesh(&self.device, &mut self.gpu_meshes, handle, assets)
+    }
+
+    fn ensure_gpu_texture(&mut self, handle: TextureHandle, assets: &AssetServer) -> Result<()> {
+        gpu_resources::ensure_gpu_texture(
+            &self.device,
+            &self.queue,
+            &mut self.gpu_textures,
+            handle,
+            assets,
+        )
+    }
+}
+
 struct RenderState {
     _instance: wgpu::Instance,
     _window: Arc<Window>,
