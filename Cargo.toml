@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/engine-reflect",
     "crates/engine-reflect-derive",
+    "crates/engine-editor",
     "crates/engine-core",
     "crates/engine-render",
     "crates/engine-physics",
@@ -40,3 +41,10 @@ log = "0.4"
 env_logger = "0.11"
 anyhow = "1"
 thiserror = "1"
+egui = "0.31"
+eframe = { version = "0.31", features = ["wgpu"] }
+egui_dock = { version = "0.16", features = ["serde"] }
+egui-wgpu = "0.31"
+egui-winit = "0.31"
+rfd = "0.15"
+dirs = "5"
