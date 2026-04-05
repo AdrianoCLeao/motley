@@ -246,11 +246,11 @@ impl ViewportRenderModule {
             self.ensure_gpu_texture(draw_item.texture, assets)?;
         }
 
-        let mut encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("engine-render-viewport-encoder"),
-                });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("engine-render-viewport-encoder"),
+            });
 
         {
             let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -343,13 +343,13 @@ impl ViewportRenderModule {
                 model: draw_item.model,
                 normal: draw_item.normal,
             };
-            let model_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("engine-render-model-uniform"),
-                        contents: bytemuck::bytes_of(&model_uniform),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
+            let model_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("engine-render-model-uniform"),
+                    contents: bytemuck::bytes_of(&model_uniform),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
             frame_model_buffers.push(model_buffer);
             let model_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("engine-render-model-bind-group"),
@@ -409,7 +409,8 @@ impl ViewportRenderModule {
             render_pass.set_bind_group(1, model_bind_group, &[]);
             render_pass.set_bind_group(2, material_bind_group, &[]);
             render_pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass
+                .set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..gpu_mesh.index_count, 0, 0..1);
         }
     }
@@ -433,13 +434,13 @@ impl ViewportRenderModule {
             })
             .collect();
 
-        let instance_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("engine-render-sprite-instance-buffer"),
-                    contents: bytemuck::cast_slice(instances.as_slice()),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let instance_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("engine-render-sprite-instance-buffer"),
+                contents: bytemuck::cast_slice(instances.as_slice()),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("engine-render-viewport-2d-pass"),

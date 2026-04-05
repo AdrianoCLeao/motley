@@ -11,8 +11,8 @@ use engine_assets::{
     SceneValue, TextureHandle,
 };
 use engine_core::{
-    Camera2d, Camera3d, EngineError, GlobalTransform, PrimaryCamera, RenderLayer2D,
-    RenderLayer3D, Result, Visible,
+    Camera2d, Camera3d, EngineError, GlobalTransform, PrimaryCamera, RenderLayer2D, RenderLayer3D,
+    Result, Visible,
 };
 use engine_math::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
@@ -308,12 +308,7 @@ impl ViewportRenderer {
         self.last_error.as_deref()
     }
 
-    pub fn ensure_size(
-        &mut self,
-        render_state: &egui_wgpu::RenderState,
-        width: u32,
-        height: u32,
-    ) {
+    pub fn ensure_size(&mut self, render_state: &egui_wgpu::RenderState, width: u32, height: u32) {
         let width = width.max(1);
         let height = height.max(1);
 
@@ -324,20 +319,23 @@ impl ViewportRenderer {
             return;
         }
 
-        let texture = render_state.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("engine-editor-viewport-texture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+        let texture = render_state
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("engine-editor-viewport-texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -600,13 +598,13 @@ impl ViewportRenderModule {
                 model: draw_item.model,
                 normal: draw_item.normal,
             };
-            let model_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("engine-editor-model-uniform"),
-                        contents: bytemuck::bytes_of(&model_uniform),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
+            let model_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("engine-editor-model-uniform"),
+                    contents: bytemuck::bytes_of(&model_uniform),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
             frame_model_buffers.push(model_buffer);
             let model_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("engine-editor-model-bind-group"),
@@ -666,7 +664,8 @@ impl ViewportRenderModule {
             render_pass.set_bind_group(1, model_bind_group, &[]);
             render_pass.set_bind_group(2, material_bind_group, &[]);
             render_pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass
+                .set_index_buffer(gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..gpu_mesh.index_count, 0, 0..1);
         }
     }
@@ -690,13 +689,13 @@ impl ViewportRenderModule {
             })
             .collect();
 
-        let instance_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("engine-editor-sprite-instance-buffer"),
-                    contents: bytemuck::cast_slice(instances.as_slice()),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let instance_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("engine-editor-sprite-instance-buffer"),
+                contents: bytemuck::cast_slice(instances.as_slice()),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("engine-editor-viewport-2d-pass"),
@@ -780,8 +779,9 @@ impl ViewportRenderModule {
             })
             .collect();
 
-        let index_count = u32::try_from(payload.indices.len())
-            .map_err(|_| EngineError::Render("mesh index count overflow for u32 draw call".to_owned()))?;
+        let index_count = u32::try_from(payload.indices.len()).map_err(|_| {
+            EngineError::Render("mesh index count overflow for u32 draw call".to_owned())
+        })?;
 
         let vertex_buffer = self
             .device
@@ -1047,7 +1047,11 @@ fn extract_camera_uniform_3d(world: &mut World) -> Option<Camera3dUniform> {
     })
 }
 
-fn extract_camera_uniform_2d(world: &mut World, viewport_width: u32, viewport_height: u32) -> Camera2dUniform {
+fn extract_camera_uniform_2d(
+    world: &mut World,
+    viewport_width: u32,
+    viewport_height: u32,
+) -> Camera2dUniform {
     let mut query = world.query_filtered::<(&Camera2d, &GlobalTransform), With<PrimaryCamera>>();
 
     let view_proj = if let Some((camera, global_transform)) = query.iter(world).next() {

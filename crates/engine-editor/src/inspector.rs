@@ -34,84 +34,85 @@ impl InspectorPanel {
         with_inspector_registries(
             world,
             |world, type_registry, component_registry, metadata_registry| {
-            let Some(entity) = selection.primary() else {
-                ui.centered_and_justified(|ui| {
-                    ui.label("No entity selected");
-                });
-                return;
-            };
+                let Some(entity) = selection.primary() else {
+                    ui.centered_and_justified(|ui| {
+                        ui.label("No entity selected");
+                    });
+                    return;
+                };
 
-            if world.get_entity(entity).is_err() {
-                ui.centered_and_justified(|ui| {
-                    ui.label("Selection no longer exists");
-                });
-                return;
-            }
-
-            Self::draw_entity_name_editor(
-                ui,
-                world,
-                entity,
-                component_registry,
-                &mut pending_commands,
-            );
-
-            ui.separator();
-
-            for descriptor in component_registry.all() {
-                if !descriptor.has(entity, world) {
-                    continue;
+                if world.get_entity(entity).is_err() {
+                    ui.centered_and_justified(|ui| {
+                        ui.label("Selection no longer exists");
+                    });
+                    return;
                 }
 
-                let component_name = descriptor.name;
-                let header = short_type_name(component_name);
+                Self::draw_entity_name_editor(
+                    ui,
+                    world,
+                    entity,
+                    component_registry,
+                    &mut pending_commands,
+                );
 
-                egui::CollapsingHeader::new(header)
-                    .id_salt(("inspector_component", component_name))
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            if ui
-                                .small_button("✕")
-                                .on_hover_text("Remove component")
-                                .clicked()
-                            {
-                                pending_commands.push(Box::new(RemoveComponentCommand::new(
-                                    entity,
-                                    component_name,
-                                )));
-                            }
-                        });
+                ui.separator();
 
-                        if let Some(component) = descriptor.get_reflect(entity, world) {
-                            Self::draw_reflect(
-                                ui,
-                                entity,
-                                descriptor,
-                                type_registry,
-                                metadata_registry,
-                                component.as_partial_reflect(),
-                                "",
-                                &mut pending_commands,
-                            );
-                        }
-                    });
-            }
-
-            ui.separator();
-            ui.menu_button("+ Add Component", |ui| {
                 for descriptor in component_registry.all() {
-                    if descriptor.has(entity, world) {
+                    if !descriptor.has(entity, world) {
                         continue;
                     }
 
-                    let display = short_type_name(descriptor.name);
-                    if ui.button(display).clicked() {
-                        pending_commands.push(Box::new(AddComponentCommand::new(entity, descriptor.name)));
-                        ui.close_menu();
-                    }
+                    let component_name = descriptor.name;
+                    let header = short_type_name(component_name);
+
+                    egui::CollapsingHeader::new(header)
+                        .id_salt(("inspector_component", component_name))
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .small_button("✕")
+                                    .on_hover_text("Remove component")
+                                    .clicked()
+                                {
+                                    pending_commands.push(Box::new(RemoveComponentCommand::new(
+                                        entity,
+                                        component_name,
+                                    )));
+                                }
+                            });
+
+                            if let Some(component) = descriptor.get_reflect(entity, world) {
+                                Self::draw_reflect(
+                                    ui,
+                                    entity,
+                                    descriptor,
+                                    type_registry,
+                                    metadata_registry,
+                                    component.as_partial_reflect(),
+                                    "",
+                                    &mut pending_commands,
+                                );
+                            }
+                        });
                 }
-            });
+
+                ui.separator();
+                ui.menu_button("+ Add Component", |ui| {
+                    for descriptor in component_registry.all() {
+                        if descriptor.has(entity, world) {
+                            continue;
+                        }
+
+                        let display = short_type_name(descriptor.name);
+                        if ui.button(display).clicked() {
+                            pending_commands
+                                .push(Box::new(AddComponentCommand::new(entity, descriptor.name)));
+                            ui.close_menu();
+                        }
+                    }
+                });
             },
         );
 
@@ -133,7 +134,9 @@ impl InspectorPanel {
         component_registry: &ComponentRegistry,
         pending_commands: &mut Vec<Box<dyn EditorCommand>>,
     ) {
-        let Some(descriptor) = Self::find_component(world, entity, component_registry, "EntityName") else {
+        let Some(descriptor) =
+            Self::find_component(world, entity, component_registry, "EntityName")
+        else {
             return;
         };
 
@@ -269,16 +272,20 @@ impl InspectorPanel {
                 if let Some(current) = field_value.try_downcast_ref::<f32>() {
                     let mut edited = *current;
                     let changed = match hint {
-                        Some(EditorHint::Range { min, max }) => {
-                            ui.add(egui::Slider::new(&mut edited, min as f32..=max as f32)).changed()
-                        }
+                        Some(EditorHint::Range { min, max }) => ui
+                            .add(egui::Slider::new(&mut edited, min as f32..=max as f32))
+                            .changed(),
                         Some(EditorHint::Degrees) => {
                             let mut degrees = edited.to_degrees();
-                            let changed = ui.add(egui::DragValue::new(&mut degrees).suffix("°")).changed();
+                            let changed = ui
+                                .add(egui::DragValue::new(&mut degrees).suffix("°"))
+                                .changed();
                             edited = degrees.to_radians();
                             changed
                         }
-                        _ => ui.add(egui::DragValue::new(&mut edited).speed(0.01)).changed(),
+                        _ => ui
+                            .add(egui::DragValue::new(&mut edited).speed(0.01))
+                            .changed(),
                     };
 
                     if changed {
@@ -297,7 +304,10 @@ impl InspectorPanel {
 
                 if let Some(current) = field_value.try_downcast_ref::<f64>() {
                     let mut edited = *current;
-                    if ui.add(egui::DragValue::new(&mut edited).speed(0.01)).changed() {
+                    if ui
+                        .add(egui::DragValue::new(&mut edited).speed(0.01))
+                        .changed()
+                    {
                         committed = true;
                         pending_commands.push(Box::new(SetFieldCommand {
                             entity,
@@ -313,7 +323,10 @@ impl InspectorPanel {
 
                 if let Some(current) = field_value.try_downcast_ref::<i32>() {
                     let mut edited = *current;
-                    if ui.add(egui::DragValue::new(&mut edited).speed(1.0)).changed() {
+                    if ui
+                        .add(egui::DragValue::new(&mut edited).speed(1.0))
+                        .changed()
+                    {
                         committed = true;
                         pending_commands.push(Box::new(SetFieldCommand {
                             entity,
@@ -329,7 +342,10 @@ impl InspectorPanel {
 
                 if let Some(current) = field_value.try_downcast_ref::<u32>() {
                     let mut edited = *current;
-                    if ui.add(egui::DragValue::new(&mut edited).speed(1.0)).changed() {
+                    if ui
+                        .add(egui::DragValue::new(&mut edited).speed(1.0))
+                        .changed()
+                    {
                         committed = true;
                         pending_commands.push(Box::new(SetFieldCommand {
                             entity,
@@ -371,9 +387,15 @@ impl InspectorPanel {
                     egui::ComboBox::from_id_salt(("enum_variant", descriptor.name, full_path))
                         .selected_text(&selected_variant)
                         .show_ui(ui, |ui| {
-                            if let Some(TypeInfo::Enum(enum_info)) = field_value.get_represented_type_info() {
+                            if let Some(TypeInfo::Enum(enum_info)) =
+                                field_value.get_represented_type_info()
+                            {
                                 for variant in enum_info.variant_names() {
-                                    ui.selectable_value(&mut selected_variant, (*variant).to_owned(), *variant);
+                                    ui.selectable_value(
+                                        &mut selected_variant,
+                                        (*variant).to_owned(),
+                                        *variant,
+                                    );
                                 }
                             }
                         });
@@ -389,7 +411,11 @@ impl InspectorPanel {
                                 field_path: full_path.to_owned(),
                                 old_value: field_value.clone_value(),
                                 new_value: new_enum,
-                                desc: format!("Set {}.{}", short_type_name(descriptor.name), full_path),
+                                desc: format!(
+                                    "Set {}.{}",
+                                    short_type_name(descriptor.name),
+                                    full_path
+                                ),
                             }));
                         }
                     }
@@ -416,37 +442,35 @@ impl InspectorPanel {
                     );
                 });
             }
-            ReflectRef::Enum(enum_reflect) => {
-                match enum_reflect.variant_type() {
-                    VariantType::Struct | VariantType::Tuple => {
-                        ui.indent(("enum_fields", descriptor.name, full_path), |ui| {
-                            for index in 0..enum_reflect.field_len() {
-                                let Some(inner) = enum_reflect.field_at(index) else {
-                                    continue;
-                                };
-                                let inner_label = enum_reflect
-                                    .name_at(index)
-                                    .map(ToOwned::to_owned)
-                                    .unwrap_or_else(|| index.to_string());
-                                let inner_path = format!("{}.{}", full_path, inner_label);
+            ReflectRef::Enum(enum_reflect) => match enum_reflect.variant_type() {
+                VariantType::Struct | VariantType::Tuple => {
+                    ui.indent(("enum_fields", descriptor.name, full_path), |ui| {
+                        for index in 0..enum_reflect.field_len() {
+                            let Some(inner) = enum_reflect.field_at(index) else {
+                                continue;
+                            };
+                            let inner_label = enum_reflect
+                                .name_at(index)
+                                .map(ToOwned::to_owned)
+                                .unwrap_or_else(|| index.to_string());
+                            let inner_path = format!("{}.{}", full_path, inner_label);
 
-                                Self::draw_field_row(
-                                    ui,
-                                    entity,
-                                    descriptor,
-                                    type_registry,
-                                    metadata_registry,
-                                    &inner_label,
-                                    inner,
-                                    &inner_path,
-                                    pending_commands,
-                                );
-                            }
-                        });
-                    }
-                    VariantType::Unit => {}
+                            Self::draw_field_row(
+                                ui,
+                                entity,
+                                descriptor,
+                                type_registry,
+                                metadata_registry,
+                                &inner_label,
+                                inner,
+                                &inner_path,
+                                pending_commands,
+                            );
+                        }
+                    });
                 }
-            }
+                VariantType::Unit => {}
+            },
             _ => {}
         }
     }
@@ -537,7 +561,8 @@ fn build_default_value(
 ) -> Option<Box<dyn PartialReflect>> {
     build_default_from_registry(type_id, type_registry, depth)
         .or_else(|| {
-            type_info.and_then(|info| build_dynamic_default_from_type_info(info, type_registry, depth))
+            type_info
+                .and_then(|info| build_dynamic_default_from_type_info(info, type_registry, depth))
         })
         .or_else(|| primitive_default_for_type_path(type_path))
 }
@@ -657,9 +682,7 @@ fn primitive_default_for_type_path(type_path: &str) -> Option<Box<dyn PartialRef
         "u64" => Some(Box::new(0_u64)),
         "u128" => Some(Box::new(0_u128)),
         "usize" => Some(Box::new(0_usize)),
-        "alloc::string::String" | "std::string::String" | "String" => {
-            Some(Box::new(String::new()))
-        }
+        "alloc::string::String" | "std::string::String" | "String" => Some(Box::new(String::new())),
         _ if type_path.starts_with("core::option::Option<")
             || type_path.starts_with("std::option::Option<") =>
         {
@@ -676,12 +699,7 @@ fn primitive_default_for_type_path(type_path: &str) -> Option<Box<dyn PartialRef
 
 fn with_inspector_registries<R>(
     world: &mut World,
-    f: impl FnOnce(
-        &mut World,
-        &ReflectTypeRegistry,
-        &ComponentRegistry,
-        &ReflectMetadataRegistry,
-    ) -> R,
+    f: impl FnOnce(&mut World, &ReflectTypeRegistry, &ComponentRegistry, &ReflectMetadataRegistry) -> R,
 ) -> R {
     let type_registry = world
         .remove_resource::<ReflectTypeRegistry>()
@@ -693,7 +711,12 @@ fn with_inspector_registries<R>(
         .remove_resource::<ReflectMetadataRegistry>()
         .unwrap_or_default();
 
-    let result = f(world, &type_registry, &component_registry, &metadata_registry);
+    let result = f(
+        world,
+        &type_registry,
+        &component_registry,
+        &metadata_registry,
+    );
 
     world.insert_resource(type_registry);
     world.insert_resource(component_registry);
@@ -791,7 +814,9 @@ mod tests {
             panic!("updated payload should be an enum");
         };
 
-        let nested = enum_reflect.field("nested").expect("nested field should exist");
+        let nested = enum_reflect
+            .field("nested")
+            .expect("nested field should exist");
         let ReflectRef::Struct(struct_reflect) = nested.reflect_ref() else {
             panic!("nested payload should be a struct");
         };

@@ -68,11 +68,17 @@ impl EditorConfig {
             })?;
         }
 
-        let payload = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new())
-            .map_err(|error| EngineError::Config(format!("failed to serialize config: {}", error)))?;
+        let payload =
+            ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()).map_err(|error| {
+                EngineError::Config(format!("failed to serialize config: {}", error))
+            })?;
 
         fs::write(&path, payload).map_err(|error| {
-            EngineError::Config(format!("failed to write config '{}': {}", path.display(), error))
+            EngineError::Config(format!(
+                "failed to write config '{}': {}",
+                path.display(),
+                error
+            ))
         })
     }
 
