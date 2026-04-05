@@ -1,6 +1,6 @@
-# Motley
+# Starman
 
-Motley is a modular Rust game engine workspace focused on a custom runtime and an integrated visual editor.
+Starman is a modular Rust game engine workspace focused on a custom runtime and an integrated visual editor.
 
 ## Project Overview
 

@@ -5,7 +5,7 @@ fn main() {
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Motley Editor")
+            .with_title("Starman Editor")
             .with_inner_size([1600.0, 900.0])
             .with_min_inner_size([800.0, 600.0]),
         renderer: eframe::Renderer::Wgpu,
@@ -13,7 +13,7 @@ fn main() {
     };
 
     if let Err(error) = eframe::run_native(
-        "Motley Editor",
+        "Starman Editor",
         native_options,
         Box::new(|cc| Ok(Box::new(EditorApp::new(cc)))),
     ) {

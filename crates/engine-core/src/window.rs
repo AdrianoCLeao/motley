@@ -33,7 +33,7 @@ pub trait WindowLoop {
     }
 
     fn title(&self) -> String {
-        "Motley".to_owned()
+        "Starman".to_owned()
     }
 }
 
@@ -49,7 +49,7 @@ pub struct WindowConfig {
 impl Default for WindowConfig {
     fn default() -> Self {
         Self {
-            title: "Motley".to_owned(),
+            title: "Starman".to_owned(),
             width: 1280,
             height: 720,
             resizable: true,

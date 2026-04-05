@@ -899,11 +899,11 @@ impl EditorApp {
         }
 
         let mut open = true;
-        egui::Window::new("About Motley Editor")
+        egui::Window::new("About Starman Editor")
             .open(&mut open)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.label("Motley Editor (EP-09 foundation)");
+                ui.label("Starman Editor (EP-09 foundation)");
                 ui.label("Rust + egui + wgpu");
             });
 

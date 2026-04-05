@@ -490,9 +490,9 @@ impl Plugin<SandboxModules> for SandboxBootstrapPlugin {
 fn run() -> Result<()> {
     let modules = SandboxModules::new()?;
 
-    let config = EngineConfig::with_app_name("Motley Sandbox").with_window_config(
+    let config = EngineConfig::with_app_name("Starman Sandbox").with_window_config(
         WindowConfig::default()
-            .with_title("Motley Sandbox")
+            .with_title("Starman Sandbox")
             .with_size(1280, 720)
             .with_resizable(true)
             .with_vsync(true),

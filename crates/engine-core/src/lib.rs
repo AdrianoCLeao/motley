@@ -361,7 +361,7 @@ pub fn init_logging() {
 }
 
 pub fn engine_name() -> &'static str {
-    "Motley"
+    "Starman"
 }
 
 pub fn create_world() -> World {

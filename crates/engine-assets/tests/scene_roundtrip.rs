@@ -190,7 +190,7 @@ fn scene_deserializer_rejects_version_mismatch() {
 fn scene_load_file_accepts_handwritten_ron() {
     let (type_registry, component_registry, _) = build_registries();
 
-    let scene_path = unique_temp_path("motley-handwritten");
+    let scene_path = unique_temp_path("starman-handwritten");
     let source = r#"(
     version: 1,
     name: "HandwrittenScene",
@@ -381,8 +381,8 @@ fn scene_save_file_output_is_deterministic() {
     let serializer = SceneSerializer::new(&world, &component_registry, &type_registry)
         .with_metadata_registry(&metadata_registry);
 
-    let first_path = unique_temp_path("motley-deterministic-1");
-    let second_path = unique_temp_path("motley-deterministic-2");
+    let first_path = unique_temp_path("starman-deterministic-1");
+    let second_path = unique_temp_path("starman-deterministic-2");
     serializer
         .save_file(&first_path, "DeterministicScene")
         .expect("first scene write should succeed");
