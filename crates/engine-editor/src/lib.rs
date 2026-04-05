@@ -7,6 +7,9 @@ pub mod selection;
 pub mod viewport;
 
 #[cfg(test)]
+mod app_tests;
+
+#[cfg(test)]
 mod commands_tests;
 
 pub use app::EditorApp;
