@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -8,8 +9,8 @@ use eframe::egui;
 use egui_dock::{DockArea, DockState, TabViewer};
 use engine_assets::{AssetServer, SceneDeserializer, SceneSerializer};
 use engine_core::{
-    create_world, register_core_reflection_types, Camera2d, Camera3d, EditorEntityBundle,
-    EntityName, GlobalTransform, PrimaryCamera, RenderLayer2D, RenderLayer3D, Result,
+    create_world, register_core_reflection_types, Camera2d, Camera3d, Children, EditorEntityBundle,
+    EntityName, GlobalTransform, Parent, PrimaryCamera, RenderLayer2D, RenderLayer3D, Result,
     SpatialBundle, Transform, Visible,
 };
 use engine_physics::register_physics_reflection_types;
@@ -17,14 +18,13 @@ use engine_reflect::{ComponentRegistry, ReflectMetadataRegistry, ReflectTypeRegi
 
 use crate::commands::{
     CommandHistory, DeleteEntityCommand, DuplicateEntityCommand, RenameEntityCommand,
+    ReparentEntityCommand, SpawnEntityCommand,
 };
 use crate::config::EditorConfig;
 use crate::inspector::InspectorPanel;
 use crate::layout::{create_default_layout, Tab};
 use crate::selection::Selection;
-use crate::viewport::{
-    MeshRenderable3d, RenderSceneAdapter, SpriteRenderable2d, ViewportRenderer,
-};
+use crate::viewport::{MeshRenderable3d, RenderSceneAdapter, SpriteRenderable2d, ViewportRenderer};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum LogLevel {
@@ -43,6 +43,12 @@ struct LogEntry {
 }
 
 enum SceneTreeAction {
+    AddRootEntity,
+    AddChildEntity(Entity),
+    Reparent {
+        entity: Entity,
+        new_parent: Option<Entity>,
+    },
     BeginRename(Entity),
     CommitRename,
     CancelRename,
@@ -67,7 +73,13 @@ impl Default for ConsolePanel {
 }
 
 impl ConsolePanel {
-    fn push(&mut self, level: LogLevel, message: impl Into<String>, module: impl Into<String>, timestamp: f64) {
+    fn push(
+        &mut self,
+        level: LogLevel,
+        message: impl Into<String>,
+        module: impl Into<String>,
+        timestamp: f64,
+    ) {
         self.entries.push(LogEntry {
             level,
             message: message.into(),
@@ -102,7 +114,11 @@ impl ConsolePanel {
             .auto_shrink([false, false])
             .stick_to_bottom(self.auto_scroll)
             .show(ui, |ui| {
-                for entry in self.entries.iter().filter(|entry| entry.level >= self.filter) {
+                for entry in self
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.level >= self.filter)
+                {
                     let color = match entry.level {
                         LogLevel::Error => egui::Color32::RED,
                         LogLevel::Warn => egui::Color32::YELLOW,
@@ -114,9 +130,7 @@ impl ConsolePanel {
                         color,
                         format!(
                             "[{:.2}] [{}] {}",
-                            entry.timestamp,
-                            entry.module,
-                            entry.message
+                            entry.timestamp, entry.module, entry.message
                         ),
                     );
                 }
@@ -134,9 +148,11 @@ pub struct EditorApp {
     config: EditorConfig,
     selection: Selection,
     command_history: CommandHistory,
+    scene_filter_query: String,
     renaming_entity: Option<Entity>,
     rename_buffer: String,
     rename_focus_pending: bool,
+    dragging_entity: Option<Entity>,
     wgpu_render_state: Option<eframe::egui_wgpu::RenderState>,
     viewport_renderer: ViewportRenderer,
     started_at: Instant,
@@ -150,12 +166,7 @@ impl EditorApp {
         world.spawn(EditorEntityBundle::default());
 
         let mut console = ConsolePanel::default();
-        console.push(
-            LogLevel::Info,
-            "Editor initialized",
-            "engine::editor",
-            0.0,
-        );
+        console.push(LogLevel::Info, "Editor initialized", "engine::editor", 0.0);
 
         let mut app = Self {
             dock_state: config.dock_state.clone(),
@@ -167,9 +178,11 @@ impl EditorApp {
             config,
             selection: Selection::default(),
             command_history: CommandHistory::new(100),
+            scene_filter_query: String::new(),
             renaming_entity: None,
             rename_buffer: String::new(),
             rename_focus_pending: false,
+            dragging_entity: None,
             wgpu_render_state: cc.wgpu_render_state.clone(),
             viewport_renderer: ViewportRenderer::new(),
             started_at: Instant::now(),
@@ -181,7 +194,11 @@ impl EditorApp {
                 if let Err(error) = app.load_scene(&last_scene) {
                     app.log_message(
                         LogLevel::Warn,
-                        format!("Failed to restore last scene {}: {}", last_scene.display(), error),
+                        format!(
+                            "Failed to restore last scene {}: {}",
+                            last_scene.display(),
+                            error
+                        ),
                     );
                 } else {
                     app.file_path = Some(last_scene.clone());
@@ -213,6 +230,20 @@ impl EditorApp {
         self.selection.deselect();
     }
 
+    fn validate_selection_state(&mut self) {
+        if let Some(entity) = self.selection.primary() {
+            if self.world.get_entity(entity).is_err() {
+                self.selection.deselect();
+            }
+        }
+
+        if let Some(entity) = self.renaming_entity {
+            if self.world.get_entity(entity).is_err() {
+                self.cancel_rename_entity();
+            }
+        }
+    }
+
     fn log_message(&mut self, level: LogLevel, message: impl Into<String>) {
         let timestamp = self.now_seconds();
         self.console
@@ -242,7 +273,11 @@ impl EditorApp {
     }
 
     fn ensure_viewport_world_defaults(&mut self) {
-        let entities: Vec<Entity> = self.world.iter_entities().map(|entity| entity.id()).collect();
+        let entities: Vec<Entity> = self
+            .world
+            .iter_entities()
+            .map(|entity| entity.id())
+            .collect();
 
         for entity in entities {
             let has_transform = self.world.get::<Transform>(entity).is_some();
@@ -276,14 +311,11 @@ impl EditorApp {
     }
 
     fn ensure_primary_camera(&mut self) {
-        let has_primary_camera = self
-            .world
-            .iter_entities()
-            .any(|entity| {
-                let id = entity.id();
-                self.world.get::<Camera3d>(id).is_some()
-                    && self.world.get::<PrimaryCamera>(id).is_some()
-            });
+        let has_primary_camera = self.world.iter_entities().any(|entity| {
+            let id = entity.id();
+            self.world.get::<Camera3d>(id).is_some()
+                && self.world.get::<PrimaryCamera>(id).is_some()
+        });
 
         if has_primary_camera {
             return;
@@ -299,7 +331,10 @@ impl EditorApp {
             PrimaryCamera,
             Visible,
         ));
-        self.log_message(LogLevel::Info, "Inserted default editor camera for viewport rendering");
+        self.log_message(
+            LogLevel::Info,
+            "Inserted default editor camera for viewport rendering",
+        );
     }
 
     fn ensure_preview_mesh(&mut self) {
@@ -323,23 +358,35 @@ impl EditorApp {
             }
         };
 
-        let texture = match self.asset_server.load_texture_handle("textures/placeholder.png") {
+        let texture = match self
+            .asset_server
+            .load_texture_handle("textures/placeholder.png")
+        {
             Ok(handle) => handle,
             Err(error) => {
                 self.log_message(
                     LogLevel::Warn,
-                    format!("Preview texture load failed (textures/placeholder.png): {}", error),
+                    format!(
+                        "Preview texture load failed (textures/placeholder.png): {}",
+                        error
+                    ),
                 );
                 return;
             }
         };
 
-        let material = match self.asset_server.load_material_handle("materials/default.ron") {
+        let material = match self
+            .asset_server
+            .load_material_handle("materials/default.ron")
+        {
             Ok(handle) => handle,
             Err(error) => {
                 self.log_message(
                     LogLevel::Warn,
-                    format!("Preview material load failed (materials/default.ron): {}", error),
+                    format!(
+                        "Preview material load failed (materials/default.ron): {}",
+                        error
+                    ),
                 );
                 return;
             }
@@ -363,10 +410,16 @@ impl EditorApp {
     }
 
     fn sync_global_transforms_for_viewport(&mut self) {
-        if let Err(error) = self.world.run_system_once(engine_core::propagate_transforms) {
+        if let Err(error) = self
+            .world
+            .run_system_once(engine_core::propagate_transforms)
+        {
             self.log_message(
                 LogLevel::Warn,
-                format!("Transform propagation failed before viewport render: {}", error),
+                format!(
+                    "Transform propagation failed before viewport render: {}",
+                    error
+                ),
             );
         }
     }
@@ -380,13 +433,19 @@ impl EditorApp {
                 ui.menu_button("File", |ui: &mut egui::Ui| {
                     if ui.button("New Scene          Ctrl+N").clicked() {
                         if let Err(error) = self.cmd_new_scene() {
-                            self.log_message(LogLevel::Error, format!("New scene failed: {}", error));
+                            self.log_message(
+                                LogLevel::Error,
+                                format!("New scene failed: {}", error),
+                            );
                         }
                     }
 
                     if ui.button("Open Scene...      Ctrl+O").clicked() {
                         if let Err(error) = self.cmd_open_scene() {
-                            self.log_message(LogLevel::Error, format!("Open scene failed: {}", error));
+                            self.log_message(
+                                LogLevel::Error,
+                                format!("Open scene failed: {}", error),
+                            );
                         }
                     }
 
@@ -406,7 +465,10 @@ impl EditorApp {
                     ui.separator();
 
                     if ui
-                        .add_enabled(self.file_path.is_some(), egui::Button::new("Save            Ctrl+S"))
+                        .add_enabled(
+                            self.file_path.is_some(),
+                            egui::Button::new("Save            Ctrl+S"),
+                        )
                         .clicked()
                     {
                         if let Err(error) = self.cmd_save() {
@@ -429,7 +491,10 @@ impl EditorApp {
 
                 ui.menu_button("Edit", |ui: &mut egui::Ui| {
                     if ui
-                        .add_enabled(self.command_history.can_undo(), egui::Button::new("Undo    Ctrl+Z"))
+                        .add_enabled(
+                            self.command_history.can_undo(),
+                            egui::Button::new("Undo    Ctrl+Z"),
+                        )
                         .clicked()
                     {
                         let selection_hint = self.command_history.undo(&mut self.world);
@@ -438,7 +503,10 @@ impl EditorApp {
                     }
 
                     if ui
-                        .add_enabled(self.command_history.can_redo(), egui::Button::new("Redo    Ctrl+Y"))
+                        .add_enabled(
+                            self.command_history.can_redo(),
+                            egui::Button::new("Redo    Ctrl+Y"),
+                        )
                         .clicked()
                     {
                         let selection_hint = self.command_history.redo(&mut self.world);
@@ -448,7 +516,10 @@ impl EditorApp {
 
                     ui.separator();
                     if ui
-                        .add_enabled(self.selection.has_selection(), egui::Button::new("Delete    Del"))
+                        .add_enabled(
+                            self.selection.has_selection(),
+                            egui::Button::new("Delete    Del"),
+                        )
                         .clicked()
                     {
                         self.cmd_delete_selected();
@@ -621,13 +692,117 @@ impl EditorApp {
     }
 
     fn cmd_duplicate_entity(&mut self, entity: Entity) {
-        let selection_hint = self
-            .command_history
-            .execute(Box::new(DuplicateEntityCommand::new(entity)), &mut self.world);
+        let selection_hint = self.command_history.execute(
+            Box::new(DuplicateEntityCommand::new(entity)),
+            &mut self.world,
+        );
 
         self.apply_selection_hint(selection_hint);
         self.unsaved_changes = true;
         self.log_message(LogLevel::Info, "Duplicated selected entity");
+    }
+
+    fn cmd_add_root_entity(&mut self) {
+        let selection_hint = self
+            .command_history
+            .execute(Box::new(SpawnEntityCommand::new_root()), &mut self.world);
+
+        self.apply_selection_hint(selection_hint);
+        self.unsaved_changes = true;
+        self.log_message(LogLevel::Info, "Added root entity");
+    }
+
+    fn cmd_add_child_entity(&mut self, parent: Entity) {
+        if self.world.get_entity(parent).is_err() {
+            self.log_message(
+                LogLevel::Warn,
+                format!(
+                    "Cannot add child entity: parent {:?} does not exist",
+                    parent
+                ),
+            );
+            return;
+        }
+
+        let selection_hint = self.command_history.execute(
+            Box::new(SpawnEntityCommand::new_child(parent)),
+            &mut self.world,
+        );
+
+        self.apply_selection_hint(selection_hint);
+        self.unsaved_changes = true;
+        self.log_message(LogLevel::Info, "Added child entity");
+    }
+
+    fn cmd_reparent_entity(&mut self, entity: Entity, new_parent: Option<Entity>) {
+        if self.world.get_entity(entity).is_err() {
+            self.log_message(
+                LogLevel::Warn,
+                format!("Cannot reparent entity {:?}: entity does not exist", entity),
+            );
+            return;
+        }
+
+        if let Some(parent) = new_parent {
+            if parent == entity {
+                self.log_message(
+                    LogLevel::Warn,
+                    format!(
+                        "Cannot reparent entity {:?}: entity cannot be parent of itself",
+                        entity
+                    ),
+                );
+                return;
+            }
+
+            if self.world.get_entity(parent).is_err() {
+                self.log_message(
+                    LogLevel::Warn,
+                    format!(
+                        "Cannot reparent entity {:?}: parent {:?} does not exist",
+                        entity, parent
+                    ),
+                );
+                return;
+            }
+
+            if self.scene_tree_is_descendant(parent, entity) {
+                self.log_message(
+                    LogLevel::Warn,
+                    format!(
+                        "Cannot reparent entity {:?}: target parent {:?} is in its descendant chain",
+                        entity,
+                        parent
+                    ),
+                );
+                return;
+            }
+        }
+
+        if self.world.get::<Parent>(entity).map(|parent| parent.0) == new_parent {
+            return;
+        }
+
+        let selection_hint = self.command_history.execute(
+            Box::new(ReparentEntityCommand::new(entity, new_parent)),
+            &mut self.world,
+        );
+
+        self.apply_selection_hint(selection_hint);
+        self.unsaved_changes = true;
+
+        if let Some(parent) = new_parent {
+            self.log_message(
+                LogLevel::Info,
+                format!("Reparented entity {:?} under {:?}", entity, parent),
+            );
+        } else {
+            self.log_message(LogLevel::Info, format!("Moved entity {:?} to root", entity));
+        }
+    }
+
+    fn scene_tree_is_descendant(&self, candidate: Entity, ancestor: Entity) -> bool {
+        is_scene_tree_descendant(&self.world, candidate, ancestor)
     }
 
     fn begin_rename_entity(&mut self, entity: Entity) {
@@ -742,6 +917,8 @@ impl EditorApp {
         self.file_path = None;
         self.selection.deselect();
         self.cancel_rename_entity();
+        self.scene_filter_query.clear();
+        self.dragging_entity = None;
         self.command_history.clear();
         self.unsaved_changes = false;
         self.persist_config();
@@ -810,30 +987,37 @@ impl EditorApp {
 
         let render_scene_adapter = RenderSceneAdapter;
 
-        self.with_scene_context(|world, component_registry, type_registry, metadata_registry, asset_server| {
-            let serializer = SceneSerializer::new(world, component_registry, type_registry)
-                .with_metadata_registry(metadata_registry)
-                .with_asset_server(asset_server)
-                .with_external_components(&render_scene_adapter);
-            serializer.save_file(path, scene_name)?;
-            Ok(())
-        })
+        self.with_scene_context(
+            |world, component_registry, type_registry, metadata_registry, asset_server| {
+                let serializer = SceneSerializer::new(world, component_registry, type_registry)
+                    .with_metadata_registry(metadata_registry)
+                    .with_asset_server(asset_server)
+                    .with_external_components(&render_scene_adapter);
+                serializer.save_file(path, scene_name)?;
+                Ok(())
+            },
+        )
     }
 
     fn load_scene(&mut self, path: &Path) -> Result<()> {
         let render_scene_adapter = RenderSceneAdapter;
 
-        self.with_scene_context(|world, component_registry, type_registry, _metadata_registry, asset_server| {
-            world.clear_entities();
-            let mut deserializer = SceneDeserializer::new(world, component_registry, type_registry, asset_server)
-                .with_external_components(&render_scene_adapter);
-            let _ = deserializer.load_file(path)?;
-            Ok(())
-        })?;
+        self.with_scene_context(
+            |world, component_registry, type_registry, _metadata_registry, asset_server| {
+                world.clear_entities();
+                let mut deserializer =
+                    SceneDeserializer::new(world, component_registry, type_registry, asset_server)
+                        .with_external_components(&render_scene_adapter);
+                let _ = deserializer.load_file(path)?;
+                Ok(())
+            },
+        )?;
 
         self.bootstrap_viewport_scene();
         self.selection.deselect();
         self.cancel_rename_entity();
+        self.scene_filter_query.clear();
+        self.dragging_entity = None;
         self.command_history.clear();
 
         Ok(())
@@ -898,15 +1082,16 @@ impl EditorApp {
             .render(&render_state, &mut self.world, &self.asset_server);
 
         if let Some(texture_id) = self.viewport_renderer.texture_id() {
-            let sized_texture = egui::load::SizedTexture::new(
-                texture_id,
-                egui::vec2(width as f32, height as f32),
-            );
+            let sized_texture =
+                egui::load::SizedTexture::new(texture_id, egui::vec2(width as f32, height as f32));
             let _ = ui.add(egui::Image::new(sized_texture).sense(egui::Sense::click_and_drag()));
         }
 
         if let Some(error) = self.viewport_renderer.last_error() {
-            ui.colored_label(egui::Color32::RED, format!("Viewport render error: {}", error));
+            ui.colored_label(
+                egui::Color32::RED,
+                format!("Viewport render error: {}", error),
+            );
         } else {
             ui.label("Viewport rendering via editor offscreen backend.");
         }
@@ -918,27 +1103,93 @@ impl EditorApp {
 
         let mut pending_action = None;
 
-        let roots: Vec<Entity> = self
-            .world
-            .iter_entities()
-            .filter_map(|entity_ref| {
-                let entity = entity_ref.id();
-                if self.world.get::<engine_core::Parent>(entity).is_some() {
-                    None
-                } else {
-                    Some(entity)
-                }
-            })
-            .collect();
+        ui.horizontal(|ui| {
+            if ui.button("+").on_hover_text("Add Entity").clicked() {
+                pending_action = Some(SceneTreeAction::AddRootEntity);
+            }
+
+            ui.separator();
+            ui.label("Search:");
+            let _ = ui.add(
+                egui::TextEdit::singleline(&mut self.scene_filter_query)
+                    .desired_width(200.0)
+                    .hint_text("Filter entities..."),
+            );
+        });
+
+        ui.separator();
+
+        let roots = collect_scene_tree_roots(&self.world);
+
+        let filter_query = self.scene_filter_query.trim().to_ascii_lowercase();
+        let visibility = if filter_query.is_empty() {
+            None
+        } else {
+            Some(self.build_scene_tree_visibility(&roots, &filter_query))
+        };
+
+        let mut root_drop_hovered = false;
 
         egui::ScrollArea::vertical().show(ui, |ui| {
+            let mut visited = HashSet::new();
             for entity in roots.iter().copied() {
-                self.draw_entity_node(ui, entity, 0, &mut pending_action);
+                self.draw_entity_node(
+                    ui,
+                    entity,
+                    0,
+                    visibility.as_ref(),
+                    &mut visited,
+                    &mut pending_action,
+                );
+            }
+
+            let available = ui.available_size_before_wrap();
+            let drop_area = ui.allocate_response(
+                egui::vec2(available.x.max(0.0), available.y.max(24.0)),
+                egui::Sense::hover(),
+            );
+            root_drop_hovered = drop_area.hovered();
+
+            if self.dragging_entity.is_some() && root_drop_hovered {
+                let color = ui.visuals().selection.bg_fill.gamma_multiply(0.20);
+                ui.painter().rect_filled(drop_area.rect, 4.0, color);
+                ui.painter().text(
+                    drop_area.rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "Drop here to move to root",
+                    egui::FontId::default(),
+                    ui.visuals().strong_text_color(),
+                );
             }
         });
 
+        let pointer_released = ui.input(|input| input.pointer.any_released());
+        if pointer_released {
+            if let Some(dragging_entity) = self.dragging_entity {
+                let node_drop_already_selected =
+                    matches!(pending_action, Some(SceneTreeAction::Reparent { .. }));
+                if !node_drop_already_selected && root_drop_hovered {
+                    pending_action = Some(SceneTreeAction::Reparent {
+                        entity: dragging_entity,
+                        new_parent: None,
+                    });
+                }
+
+                self.dragging_entity = None;
+            }
+        }
+
         if let Some(action) = pending_action {
             match action {
+                SceneTreeAction::AddRootEntity => {
+                    self.cmd_add_root_entity();
+                }
+                SceneTreeAction::AddChildEntity(parent) => {
+                    self.cmd_add_child_entity(parent);
+                }
+                SceneTreeAction::Reparent { entity, new_parent } => {
+                    self.cmd_reparent_entity(entity, new_parent);
+                }
                 SceneTreeAction::BeginRename(entity) => {
                     self.begin_rename_entity(entity);
                 }
@@ -965,24 +1216,35 @@ impl EditorApp {
         ui: &mut egui::Ui,
         entity: Entity,
         depth: usize,
+        visibility: Option<&HashMap<Entity, bool>>,
+        visited: &mut HashSet<Entity>,
         pending_action: &mut Option<SceneTreeAction>,
     ) {
+        if let Some(visibility) = visibility {
+            if !visibility.get(&entity).copied().unwrap_or(false) {
+                return;
+            }
+        }
+
         let indent = depth as f32 * 14.0;
 
-        let name = self
-            .world
-            .get::<EntityName>(entity)
-            .map(|value| value.0.clone())
-            .unwrap_or_else(|| format!("Entity {:?}", entity));
+        let name = self.entity_name_for_scene_tree(entity);
+
+        if !visited.insert(entity) {
+            ui.horizontal(|ui| {
+                ui.add_space(indent);
+                ui.colored_label(egui::Color32::YELLOW, format!("{} (cycle)", name));
+            });
+            return;
+        }
 
         let is_selected = self.selection.primary() == Some(entity);
         ui.horizontal(|ui| {
             ui.add_space(indent);
 
             if self.renaming_entity == Some(entity) {
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut self.rename_buffer).desired_width(180.0),
-                );
+                let response = ui
+                    .add(egui::TextEdit::singleline(&mut self.rename_buffer).desired_width(180.0));
 
                 if self.rename_focus_pending {
                     response.request_focus();
@@ -1006,11 +1268,40 @@ impl EditorApp {
                 self.selection.select_single(entity);
             }
 
+            if response.drag_started() {
+                self.dragging_entity = Some(entity);
+            }
+
+            if let Some(dragging_entity) = self.dragging_entity {
+                let pointer_released = ui.input(|input| input.pointer.any_released());
+                let is_drop_target = dragging_entity != entity && response.hovered();
+
+                if is_drop_target {
+                    let color = ui.visuals().selection.bg_fill.gamma_multiply(0.20);
+                    ui.painter()
+                        .rect_filled(response.rect.expand(1.0), 2.0, color);
+                }
+
+                if pointer_released && is_drop_target {
+                    *pending_action = Some(SceneTreeAction::Reparent {
+                        entity: dragging_entity,
+                        new_parent: Some(entity),
+                    });
+                }
+            }
+
             if response.double_clicked() {
                 *pending_action = Some(SceneTreeAction::BeginRename(entity));
             }
 
             response.context_menu(|ui| {
+                if ui.button("Add Child Entity").clicked() {
+                    *pending_action = Some(SceneTreeAction::AddChildEntity(entity));
+                    ui.close_menu();
+                }
+
+                ui.separator();
+
                 if ui.button("Rename").clicked() {
                     *pending_action = Some(SceneTreeAction::BeginRename(entity));
                     ui.close_menu();
@@ -1029,18 +1320,29 @@ impl EditorApp {
         });
 
         if self.renaming_entity == Some(entity) {
+            visited.remove(&entity);
             return;
         }
 
         let children = self
             .world
-            .get::<engine_core::Children>(entity)
+            .get::<Children>(entity)
             .map(|children| children.0.clone())
             .unwrap_or_default();
 
         for child in children {
-            self.draw_entity_node(ui, child, depth + 1, pending_action);
+            self.draw_entity_node(ui, child, depth + 1, visibility, visited, pending_action);
         }
+
+        visited.remove(&entity);
+    }
+
+    fn build_scene_tree_visibility(&self, roots: &[Entity], query: &str) -> HashMap<Entity, bool> {
+        build_scene_tree_visibility_map(&self.world, roots, query)
+    }
+
+    fn entity_name_for_scene_tree(&self, entity: Entity) -> String {
+        scene_tree_entity_name(&self.world, entity)
     }
 
     fn show_inspector_panel(&mut self, ui: &mut egui::Ui) {
@@ -1080,6 +1382,7 @@ impl EditorApp {
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.handle_keyboard_shortcuts(ctx);
+        self.validate_selection_state();
         self.draw_menu_bar(ctx);
         self.draw_status_bar(ctx);
 
@@ -1133,6 +1436,96 @@ impl TabViewer for EditorTabViewer<'_> {
             Tab::Console => self.app.show_console_panel(ui),
         }
     }
+}
+
+pub(crate) fn collect_scene_tree_roots(world: &World) -> Vec<Entity> {
+    world
+        .iter_entities()
+        .filter_map(|entity_ref| {
+            let entity = entity_ref.id();
+            match world.get::<Parent>(entity) {
+                Some(parent) if world.get_entity(parent.0).is_ok() => None,
+                _ => Some(entity),
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn build_scene_tree_visibility_map(
+    world: &World,
+    roots: &[Entity],
+    query: &str,
+) -> HashMap<Entity, bool> {
+    let mut visibility = HashMap::new();
+    let mut stack = HashSet::new();
+
+    for root in roots {
+        let _ = compute_scene_tree_visibility_map(world, *root, query, &mut visibility, &mut stack);
+    }
+
+    visibility
+}
+
+fn compute_scene_tree_visibility_map(
+    world: &World,
+    entity: Entity,
+    query: &str,
+    visibility: &mut HashMap<Entity, bool>,
+    stack: &mut HashSet<Entity>,
+) -> bool {
+    if let Some(existing) = visibility.get(&entity) {
+        return *existing;
+    }
+
+    if !stack.insert(entity) {
+        visibility.insert(entity, false);
+        return false;
+    }
+
+    let mut is_visible = scene_tree_entity_name(world, entity)
+        .to_ascii_lowercase()
+        .contains(query);
+
+    let children = world
+        .get::<Children>(entity)
+        .map(|children| children.0.clone())
+        .unwrap_or_default();
+
+    for child in children {
+        if compute_scene_tree_visibility_map(world, child, query, visibility, stack) {
+            is_visible = true;
+        }
+    }
+
+    stack.remove(&entity);
+    visibility.insert(entity, is_visible);
+    is_visible
+}
+
+pub(crate) fn scene_tree_entity_name(world: &World, entity: Entity) -> String {
+    world
+        .get::<EntityName>(entity)
+        .map(|value| value.0.clone())
+        .unwrap_or_else(|| format!("Entity {:?}", entity))
+}
+
+pub(crate) fn is_scene_tree_descendant(world: &World, candidate: Entity, ancestor: Entity) -> bool {
+    let mut visited = HashSet::new();
+    let mut current = Some(candidate);
+
+    while let Some(entity) = current {
+        if !visited.insert(entity) {
+            break;
+        }
+
+        if entity == ancestor {
+            return true;
+        }
+
+        current = world.get::<Parent>(entity).map(|parent| parent.0);
+    }
+
+    false
 }
 
 fn build_editor_world() -> World {

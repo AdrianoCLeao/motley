@@ -1,8 +1,8 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use bevy_ecs::entity::Entity;
 use bevy_ecs::world::World;
-use engine_core::{Children, EntityName, Parent};
+use engine_core::{Children, EditorEntityBundle, EntityName, Parent};
 use engine_reflect::bevy_reflect::{PartialReflect, ReflectMut};
 use engine_reflect::{ComponentDescriptor, ComponentRegistry};
 
@@ -32,7 +32,11 @@ impl CommandHistory {
         }
     }
 
-    pub fn execute(&mut self, mut cmd: Box<dyn EditorCommand>, world: &mut World) -> Option<Entity> {
+    pub fn execute(
+        &mut self,
+        mut cmd: Box<dyn EditorCommand>,
+        world: &mut World,
+    ) -> Option<Entity> {
         cmd.execute(world);
         let selection_hint = cmd.selection_hint();
         self.undo_stack.push_back(cmd);
@@ -285,11 +289,14 @@ impl EditorCommand for DeleteEntityCommand {
             }
 
             if self.snapshot.is_none() {
-                self.parent = world.get::<Parent>(self.target_entity).map(|parent| parent.0);
+                self.parent = world
+                    .get::<Parent>(self.target_entity)
+                    .map(|parent| parent.0);
                 self.parent_index = self
                     .parent
                     .and_then(|parent| child_index_of(world, parent, self.target_entity));
-                self.snapshot = capture_entity_snapshot(world, component_registry, self.target_entity);
+                self.snapshot =
+                    capture_entity_snapshot(world, component_registry, self.target_entity);
             }
 
             if let Some(parent) = self.parent {
@@ -306,7 +313,8 @@ impl EditorCommand for DeleteEntityCommand {
                 return;
             };
 
-            let Some(restored_root) = restore_entity_snapshot(world, component_registry, snapshot) else {
+            let Some(restored_root) = restore_entity_snapshot(world, component_registry, snapshot)
+            else {
                 return;
             };
 
@@ -359,18 +367,23 @@ impl EditorCommand for DuplicateEntityCommand {
                     return;
                 }
 
-                self.parent = world.get::<Parent>(self.source_entity).map(|parent| parent.0);
+                self.parent = world
+                    .get::<Parent>(self.source_entity)
+                    .map(|parent| parent.0);
                 self.insert_index = self.parent.and_then(|parent| {
                     child_index_of(world, parent, self.source_entity).map(|index| index + 1)
                 });
-                self.snapshot = capture_entity_snapshot(world, component_registry, self.source_entity);
+                self.snapshot =
+                    capture_entity_snapshot(world, component_registry, self.source_entity);
             }
 
             let Some(snapshot) = self.snapshot.as_ref() else {
                 return;
             };
 
-            let Some(duplicated_root) = restore_entity_snapshot(world, component_registry, snapshot) else {
+            let Some(duplicated_root) =
+                restore_entity_snapshot(world, component_registry, snapshot)
+            else {
                 return;
             };
 
@@ -431,6 +444,208 @@ impl EditorCommand for RenameEntityCommand {
 
     fn undo(&mut self, world: &mut World) {
         set_entity_name(world, self.entity, &self.old_name);
+    }
+
+    fn description(&self) -> &str {
+        &self.desc
+    }
+
+    fn selection_hint(&self) -> Option<Entity> {
+        Some(self.entity)
+    }
+}
+
+pub struct SpawnEntityCommand {
+    parent: Option<Entity>,
+    insert_index: Option<usize>,
+    spawned_entity: Option<Entity>,
+    desc: String,
+}
+
+impl SpawnEntityCommand {
+    pub fn new_root() -> Self {
+        Self {
+            parent: None,
+            insert_index: None,
+            spawned_entity: None,
+            desc: "Create entity".to_owned(),
+        }
+    }
+
+    pub fn new_child(parent: Entity) -> Self {
+        Self {
+            parent: Some(parent),
+            insert_index: None,
+            spawned_entity: None,
+            desc: "Create child entity".to_owned(),
+        }
+    }
+}
+
+impl EditorCommand for SpawnEntityCommand {
+    fn execute(&mut self, world: &mut World) {
+        if let Some(parent) = self.parent {
+            if world.get_entity(parent).is_err() {
+                log::warn!(
+                    target: "engine::editor",
+                    "Skipping spawn child command: parent entity {:?} no longer exists",
+                    parent
+                );
+                return;
+            }
+
+            if self.insert_index.is_none() {
+                self.insert_index = world
+                    .get::<Children>(parent)
+                    .map(|children| children.0.len());
+            }
+        }
+
+        let entity = world.spawn(EditorEntityBundle::default()).id();
+
+        if let Some(parent) = self.parent {
+            attach_child_to_parent(world, parent, entity, self.insert_index);
+        }
+
+        self.spawned_entity = Some(entity);
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        let Some(entity) = self.spawned_entity.take() else {
+            return;
+        };
+
+        if let Some(parent) = self.parent {
+            let _ = remove_child_from_parent(world, parent, entity);
+        }
+
+        if let Ok(mut entity_ref) = world.get_entity_mut(entity) {
+            let _ = entity_ref.remove::<Parent>();
+        }
+
+        despawn_entity_subtree(world, entity);
+    }
+
+    fn description(&self) -> &str {
+        &self.desc
+    }
+
+    fn selection_hint(&self) -> Option<Entity> {
+        self.spawned_entity.or(self.parent)
+    }
+}
+
+pub struct ReparentEntityCommand {
+    entity: Entity,
+    new_parent: Option<Entity>,
+    old_parent: Option<Entity>,
+    old_parent_index: Option<usize>,
+    captured_original: bool,
+    desc: String,
+}
+
+impl ReparentEntityCommand {
+    pub fn new(entity: Entity, new_parent: Option<Entity>) -> Self {
+        Self {
+            entity,
+            new_parent,
+            old_parent: None,
+            old_parent_index: None,
+            captured_original: false,
+            desc: "Reparent entity".to_owned(),
+        }
+    }
+}
+
+impl EditorCommand for ReparentEntityCommand {
+    fn execute(&mut self, world: &mut World) {
+        if world.get_entity(self.entity).is_err() {
+            log::warn!(
+                target: "engine::editor",
+                "Skipping reparent command: entity {:?} no longer exists",
+                self.entity
+            );
+            return;
+        }
+
+        if let Some(new_parent) = self.new_parent {
+            if new_parent == self.entity {
+                log::warn!(
+                    target: "engine::editor",
+                    "Rejected reparent command: entity {:?} cannot be parent of itself",
+                    self.entity
+                );
+                return;
+            }
+
+            if world.get_entity(new_parent).is_err() {
+                log::warn!(
+                    target: "engine::editor",
+                    "Skipping reparent command: target parent {:?} no longer exists",
+                    new_parent
+                );
+                return;
+            }
+
+            if is_descendant_of(world, new_parent, self.entity) {
+                log::warn!(
+                    target: "engine::editor",
+                    "Rejected reparent command: entity {:?} cannot become child of descendant {:?}",
+                    self.entity,
+                    new_parent
+                );
+                return;
+            }
+        }
+
+        if !self.captured_original {
+            self.old_parent = world.get::<Parent>(self.entity).map(|parent| parent.0);
+            self.old_parent_index = self
+                .old_parent
+                .and_then(|parent| child_index_of(world, parent, self.entity));
+            self.captured_original = true;
+        }
+
+        let current_parent = world.get::<Parent>(self.entity).map(|parent| parent.0);
+        if current_parent == self.new_parent {
+            return;
+        }
+
+        if let Some(parent) = current_parent {
+            let _ = remove_child_from_parent(world, parent, self.entity);
+        }
+
+        if let Some(parent) = self.new_parent {
+            attach_child_to_parent(world, parent, self.entity, None);
+        } else if let Ok(mut entity_ref) = world.get_entity_mut(self.entity) {
+            let _ = entity_ref.remove::<Parent>();
+        }
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if world.get_entity(self.entity).is_err() {
+            log::warn!(
+                target: "engine::editor",
+                "Skipping undo reparent command: entity {:?} no longer exists",
+                self.entity
+            );
+            return;
+        }
+
+        let current_parent = world.get::<Parent>(self.entity).map(|parent| parent.0);
+        if let Some(parent) = current_parent {
+            let _ = remove_child_from_parent(world, parent, self.entity);
+        }
+
+        if let Some(parent) = self.old_parent {
+            if world.get_entity(parent).is_ok() {
+                attach_child_to_parent(world, parent, self.entity, self.old_parent_index);
+            } else if let Ok(mut entity_ref) = world.get_entity_mut(self.entity) {
+                let _ = entity_ref.remove::<Parent>();
+            }
+        } else if let Ok(mut entity_ref) = world.get_entity_mut(self.entity) {
+            let _ = entity_ref.remove::<Parent>();
+        }
     }
 
     fn description(&self) -> &str {
@@ -534,12 +749,9 @@ fn find_descriptor<'a>(
     component_registry: &'a ComponentRegistry,
     component_name: &str,
 ) -> Option<&'a ComponentDescriptor> {
-    component_registry
-        .all()
-        .iter()
-        .find(|descriptor| {
-            descriptor.name == component_name || short_type_name(descriptor.name) == component_name
-        })
+    component_registry.all().iter().find(|descriptor| {
+        descriptor.name == component_name || short_type_name(descriptor.name) == component_name
+    })
 }
 
 fn capture_entity_snapshot(
@@ -609,7 +821,8 @@ fn restore_entity_snapshot(
     }
 
     for component in &snapshot.components {
-        let Some(descriptor) = find_descriptor(component_registry, &component.component_name) else {
+        let Some(descriptor) = find_descriptor(component_registry, &component.component_name)
+        else {
             continue;
         };
 
@@ -626,7 +839,8 @@ fn restore_entity_snapshot(
 
     let mut restored_children = Vec::new();
     for child_snapshot in &snapshot.children {
-        let Some(child_entity) = restore_entity_snapshot(world, component_registry, child_snapshot) else {
+        let Some(child_entity) = restore_entity_snapshot(world, component_registry, child_snapshot)
+        else {
             continue;
         };
 
@@ -735,6 +949,25 @@ fn despawn_entity_subtree(world: &mut World, root: Entity) {
     for entity in entities {
         let _ = world.despawn(entity);
     }
+}
+
+fn is_descendant_of(world: &World, candidate: Entity, ancestor: Entity) -> bool {
+    let mut visited = HashSet::new();
+    let mut current = Some(candidate);
+
+    while let Some(entity) = current {
+        if !visited.insert(entity) {
+            break;
+        }
+
+        if entity == ancestor {
+            return true;
+        }
+
+        current = world.get::<Parent>(entity).map(|parent| parent.0);
+    }
+
+    false
 }
 
 fn with_component_registry<R>(
