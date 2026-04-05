@@ -282,6 +282,12 @@ pub struct ViewportRenderer {
     last_error: Option<String>,
 }
 
+impl Default for ViewportRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ViewportRenderer {
     pub fn new() -> Self {
         Self {

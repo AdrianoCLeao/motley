@@ -1,9 +1,4 @@
-mod app;
-mod config;
-mod layout;
-mod viewport;
-
-use app::EditorApp;
+use engine_editor::EditorApp;
 
 fn main() {
     engine_core::init_logging();
