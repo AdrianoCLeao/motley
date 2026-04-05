@@ -15,8 +15,13 @@ use engine_core::{
 use engine_physics::register_physics_reflection_types;
 use engine_reflect::{ComponentRegistry, ReflectMetadataRegistry, ReflectTypeRegistry};
 
+use crate::commands::{
+    CommandHistory, DeleteEntityCommand, DuplicateEntityCommand, RenameEntityCommand,
+};
 use crate::config::EditorConfig;
+use crate::inspector::InspectorPanel;
 use crate::layout::{create_default_layout, Tab};
+use crate::selection::Selection;
 use crate::viewport::{
     MeshRenderable3d, RenderSceneAdapter, SpriteRenderable2d, ViewportRenderer,
 };
@@ -35,6 +40,14 @@ struct LogEntry {
     message: String,
     timestamp: f64,
     module: String,
+}
+
+enum SceneTreeAction {
+    BeginRename(Entity),
+    CommitRename,
+    CancelRename,
+    Duplicate(Entity),
+    Delete(Entity),
 }
 
 struct ConsolePanel {
@@ -119,7 +132,11 @@ pub struct EditorApp {
     pub unsaved_changes: bool,
     pub show_about: bool,
     config: EditorConfig,
-    selected_entity: Option<Entity>,
+    selection: Selection,
+    command_history: CommandHistory,
+    renaming_entity: Option<Entity>,
+    rename_buffer: String,
+    rename_focus_pending: bool,
     wgpu_render_state: Option<eframe::egui_wgpu::RenderState>,
     viewport_renderer: ViewportRenderer,
     started_at: Instant,
@@ -148,7 +165,11 @@ impl EditorApp {
             unsaved_changes: false,
             show_about: false,
             config,
-            selected_entity: None,
+            selection: Selection::default(),
+            command_history: CommandHistory::new(100),
+            renaming_entity: None,
+            rename_buffer: String::new(),
+            rename_focus_pending: false,
             wgpu_render_state: cc.wgpu_render_state.clone(),
             viewport_renderer: ViewportRenderer::new(),
             started_at: Instant::now(),
@@ -179,6 +200,17 @@ impl EditorApp {
 
     fn now_seconds(&self) -> f64 {
         self.started_at.elapsed().as_secs_f64()
+    }
+
+    fn apply_selection_hint(&mut self, entity: Option<Entity>) {
+        if let Some(entity) = entity {
+            if self.world.get_entity(entity).is_ok() {
+                self.selection.select_single(entity);
+                return;
+            }
+        }
+
+        self.selection.deselect();
     }
 
     fn log_message(&mut self, level: LogLevel, message: impl Into<String>) {
@@ -396,11 +428,41 @@ impl EditorApp {
                 });
 
                 ui.menu_button("Edit", |ui: &mut egui::Ui| {
-                    ui.add_enabled(false, egui::Button::new("Undo    Ctrl+Z"));
-                    ui.add_enabled(false, egui::Button::new("Redo    Ctrl+Y"));
+                    if ui
+                        .add_enabled(self.command_history.can_undo(), egui::Button::new("Undo    Ctrl+Z"))
+                        .clicked()
+                    {
+                        let selection_hint = self.command_history.undo(&mut self.world);
+                        self.apply_selection_hint(selection_hint);
+                        self.unsaved_changes = true;
+                    }
+
+                    if ui
+                        .add_enabled(self.command_history.can_redo(), egui::Button::new("Redo    Ctrl+Y"))
+                        .clicked()
+                    {
+                        let selection_hint = self.command_history.redo(&mut self.world);
+                        self.apply_selection_hint(selection_hint);
+                        self.unsaved_changes = true;
+                    }
+
                     ui.separator();
-                    ui.add_enabled(false, egui::Button::new("Delete    Del"));
-                    ui.add_enabled(false, egui::Button::new("Duplicate    Ctrl+D"));
+                    if ui
+                        .add_enabled(self.selection.has_selection(), egui::Button::new("Delete    Del"))
+                        .clicked()
+                    {
+                        self.cmd_delete_selected();
+                    }
+
+                    if ui
+                        .add_enabled(
+                            self.selection.has_selection(),
+                            egui::Button::new("Duplicate    Ctrl+D"),
+                        )
+                        .clicked()
+                    {
+                        self.cmd_duplicate_selected();
+                    }
                 });
 
                 ui.menu_button("Help", |ui: &mut egui::Ui| {
@@ -423,6 +485,11 @@ impl EditorApp {
         let mut open_scene = false;
         let mut save_scene = false;
         let mut save_as_scene = false;
+        let mut undo = false;
+        let mut redo = false;
+        let mut delete_selected = false;
+        let mut duplicate_selected = false;
+        let mut begin_rename = false;
         let mut clear_selection = false;
 
         ctx.input_mut(|input| {
@@ -448,6 +515,25 @@ impl EditorApp {
                 },
                 egui::Key::S,
             ));
+
+            undo = input.consume_shortcut(&egui::KeyboardShortcut::new(
+                egui::Modifiers::CTRL,
+                egui::Key::Z,
+            ));
+
+            redo = input.consume_shortcut(&egui::KeyboardShortcut::new(
+                egui::Modifiers::CTRL,
+                egui::Key::Y,
+            ));
+
+            duplicate_selected = input.consume_shortcut(&egui::KeyboardShortcut::new(
+                egui::Modifiers::CTRL,
+                egui::Key::D,
+            ));
+
+            delete_selected = input.key_pressed(egui::Key::Delete);
+            begin_rename = input.key_pressed(egui::Key::F2);
+
             clear_selection = input.key_pressed(egui::Key::Escape);
         });
 
@@ -473,9 +559,132 @@ impl EditorApp {
             }
         }
 
-        if clear_selection {
-            self.selected_entity = None;
+        if undo {
+            let selection_hint = self.command_history.undo(&mut self.world);
+            self.apply_selection_hint(selection_hint);
+            self.unsaved_changes = true;
         }
+
+        if redo {
+            let selection_hint = self.command_history.redo(&mut self.world);
+            self.apply_selection_hint(selection_hint);
+            self.unsaved_changes = true;
+        }
+
+        if duplicate_selected {
+            self.cmd_duplicate_selected();
+        }
+
+        if delete_selected {
+            self.cmd_delete_selected();
+        }
+
+        if begin_rename {
+            if let Some(entity) = self.selection.primary() {
+                self.begin_rename_entity(entity);
+            }
+        }
+
+        if clear_selection {
+            if self.renaming_entity.is_some() {
+                self.cancel_rename_entity();
+            } else {
+                self.selection.deselect();
+            }
+        }
+    }
+
+    fn cmd_delete_selected(&mut self) {
+        let Some(entity) = self.selection.primary() else {
+            return;
+        };
+
+        self.cmd_delete_entity(entity);
+    }
+
+    fn cmd_delete_entity(&mut self, entity: Entity) {
+        let selection_hint = self
+            .command_history
+            .execute(Box::new(DeleteEntityCommand::new(entity)), &mut self.world);
+
+        self.apply_selection_hint(selection_hint);
+        self.unsaved_changes = true;
+        self.log_message(LogLevel::Info, "Deleted selected entity");
+    }
+
+    fn cmd_duplicate_selected(&mut self) {
+        let Some(entity) = self.selection.primary() else {
+            return;
+        };
+
+        self.cmd_duplicate_entity(entity);
+    }
+
+    fn cmd_duplicate_entity(&mut self, entity: Entity) {
+        let selection_hint = self
+            .command_history
+            .execute(Box::new(DuplicateEntityCommand::new(entity)), &mut self.world);
+
+        self.apply_selection_hint(selection_hint);
+        self.unsaved_changes = true;
+        self.log_message(LogLevel::Info, "Duplicated selected entity");
+    }
+
+    fn begin_rename_entity(&mut self, entity: Entity) {
+        let current_name = self
+            .world
+            .get::<EntityName>(entity)
+            .map(|value| value.0.clone())
+            .unwrap_or_else(|| "Entity".to_owned());
+
+        self.renaming_entity = Some(entity);
+        self.rename_buffer = current_name;
+        self.rename_focus_pending = true;
+    }
+
+    fn commit_rename_entity(&mut self) {
+        let Some(entity) = self.renaming_entity else {
+            return;
+        };
+
+        let new_name = self.rename_buffer.trim().to_owned();
+        if new_name.is_empty() {
+            self.renaming_entity = None;
+            self.rename_buffer.clear();
+            self.rename_focus_pending = false;
+            return;
+        }
+
+        let old_name = self
+            .world
+            .get::<EntityName>(entity)
+            .map(|value| value.0.clone())
+            .unwrap_or_else(|| "Entity".to_owned());
+
+        if old_name == new_name {
+            self.renaming_entity = None;
+            self.rename_buffer.clear();
+            self.rename_focus_pending = false;
+            return;
+        }
+
+        let selection_hint = self.command_history.execute(
+            Box::new(RenameEntityCommand::new(entity, old_name, new_name)),
+            &mut self.world,
+        );
+
+        self.apply_selection_hint(selection_hint);
+        self.unsaved_changes = true;
+        self.renaming_entity = None;
+        self.rename_buffer.clear();
+        self.rename_focus_pending = false;
+        self.log_message(LogLevel::Info, "Renamed entity");
+    }
+
+    fn cancel_rename_entity(&mut self) {
+        self.renaming_entity = None;
+        self.rename_buffer.clear();
+        self.rename_focus_pending = false;
     }
 
     fn draw_status_bar(&self, ctx: &egui::Context) {
@@ -531,7 +740,9 @@ impl EditorApp {
         self.world.spawn(EditorEntityBundle::default());
         self.bootstrap_viewport_scene();
         self.file_path = None;
-        self.selected_entity = None;
+        self.selection.deselect();
+        self.cancel_rename_entity();
+        self.command_history.clear();
         self.unsaved_changes = false;
         self.persist_config();
         self.log_message(LogLevel::Info, "Created new scene");
@@ -621,7 +832,9 @@ impl EditorApp {
         })?;
 
         self.bootstrap_viewport_scene();
-        self.selected_entity = None;
+        self.selection.deselect();
+        self.cancel_rename_entity();
+        self.command_history.clear();
 
         Ok(())
     }
@@ -703,6 +916,8 @@ impl EditorApp {
         ui.heading("Scene Hierarchy");
         ui.separator();
 
+        let mut pending_action = None;
+
         let roots: Vec<Entity> = self
             .world
             .iter_entities()
@@ -718,12 +933,40 @@ impl EditorApp {
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for entity in roots.iter().copied() {
-                self.draw_entity_node(ui, entity, 0);
+                self.draw_entity_node(ui, entity, 0, &mut pending_action);
             }
         });
+
+        if let Some(action) = pending_action {
+            match action {
+                SceneTreeAction::BeginRename(entity) => {
+                    self.begin_rename_entity(entity);
+                }
+                SceneTreeAction::CommitRename => {
+                    self.commit_rename_entity();
+                }
+                SceneTreeAction::CancelRename => {
+                    self.cancel_rename_entity();
+                }
+                SceneTreeAction::Duplicate(entity) => {
+                    self.selection.select_single(entity);
+                    self.cmd_duplicate_entity(entity);
+                }
+                SceneTreeAction::Delete(entity) => {
+                    self.selection.select_single(entity);
+                    self.cmd_delete_entity(entity);
+                }
+            }
+        }
     }
 
-    fn draw_entity_node(&mut self, ui: &mut egui::Ui, entity: Entity, depth: usize) {
+    fn draw_entity_node(
+        &mut self,
+        ui: &mut egui::Ui,
+        entity: Entity,
+        depth: usize,
+        pending_action: &mut Option<SceneTreeAction>,
+    ) {
         let indent = depth as f32 * 14.0;
 
         let name = self
@@ -732,13 +975,62 @@ impl EditorApp {
             .map(|value| value.0.clone())
             .unwrap_or_else(|| format!("Entity {:?}", entity));
 
-        let is_selected = self.selected_entity == Some(entity);
+        let is_selected = self.selection.primary() == Some(entity);
         ui.horizontal(|ui| {
             ui.add_space(indent);
-            if ui.selectable_label(is_selected, name).clicked() {
-                self.selected_entity = Some(entity);
+
+            if self.renaming_entity == Some(entity) {
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut self.rename_buffer).desired_width(180.0),
+                );
+
+                if self.rename_focus_pending {
+                    response.request_focus();
+                    self.rename_focus_pending = false;
+                }
+
+                if response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+                    *pending_action = Some(SceneTreeAction::CommitRename);
+                }
+
+                if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+                    *pending_action = Some(SceneTreeAction::CancelRename);
+                }
+
+                return;
             }
+
+            let response = ui.selectable_label(is_selected, name);
+
+            if response.clicked() {
+                self.selection.select_single(entity);
+            }
+
+            if response.double_clicked() {
+                *pending_action = Some(SceneTreeAction::BeginRename(entity));
+            }
+
+            response.context_menu(|ui| {
+                if ui.button("Rename").clicked() {
+                    *pending_action = Some(SceneTreeAction::BeginRename(entity));
+                    ui.close_menu();
+                }
+
+                if ui.button("Duplicate").clicked() {
+                    *pending_action = Some(SceneTreeAction::Duplicate(entity));
+                    ui.close_menu();
+                }
+
+                if ui.button("Delete").clicked() {
+                    *pending_action = Some(SceneTreeAction::Delete(entity));
+                    ui.close_menu();
+                }
+            });
         });
+
+        if self.renaming_entity == Some(entity) {
+            return;
+        }
 
         let children = self
             .world
@@ -747,43 +1039,20 @@ impl EditorApp {
             .unwrap_or_default();
 
         for child in children {
-            self.draw_entity_node(ui, child, depth + 1);
+            self.draw_entity_node(ui, child, depth + 1, pending_action);
         }
     }
 
     fn show_inspector_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("Inspector");
         ui.separator();
-        ui.label("Read-only foundation. Property editing starts in EP-10.");
-
-        let Some(entity) = self.selected_entity else {
-            ui.label("No entity selected.");
-            return;
-        };
-
-        if self.world.get_entity(entity).is_err() {
-            self.selected_entity = None;
-            ui.label("Selection no longer exists.");
-            return;
-        }
-
-        ui.label(format!("Entity: {:?}", entity));
-
-        if let Some(name) = self.world.get::<EntityName>(entity) {
-            ui.label(format!("EntityName: {}", name.0));
-        }
-
-        if let Some(transform) = self.world.get::<engine_core::Transform>(entity) {
-            ui.separator();
-            ui.label("Transform");
-            ui.label(format!(
-                "translation: ({:.3}, {:.3}, {:.3})",
-                transform.translation.x, transform.translation.y, transform.translation.z
-            ));
-            ui.label(format!(
-                "scale: ({:.3}, {:.3}, {:.3})",
-                transform.scale.x, transform.scale.y, transform.scale.z
-            ));
+        if InspectorPanel::show(
+            ui,
+            &mut self.world,
+            &self.selection,
+            &mut self.command_history,
+        ) {
+            self.unsaved_changes = true;
         }
     }
 
